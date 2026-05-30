@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./assets/icon.svg" width="120" alt="PopForge icon" />
+</p>
+
 # Tauri + SvelteKit + TypeScript
 
 This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
