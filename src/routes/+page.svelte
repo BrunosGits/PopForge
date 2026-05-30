@@ -1,156 +1,410 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  type Mode = 'convert' | 'extract';
+  type JobStatus = 'pending' | 'running' | 'done' | 'error';
 
-  let name = $state("");
-  let greetMsg = $state("");
+  type Job = {
+    id: number;
+    fileName: string;
+    mode: Mode;
+    status: JobStatus;
+  };
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  let mode: Mode = 'convert';
+  let gameName = '';
+  let gameId = 'AUTO';
+  let compression = 9;
+  let outputTemplate = '[%GAMEID%] %TITLE% (%REGION%)';
+
+  let jobs: Job[] = [
+    {
+      id: 1,
+      fileName: 'Example Game.cue',
+      mode: 'convert',
+      status: 'pending'
+    }
+  ];
+
+  function addMockJob() {
+    jobs = [
+      ...jobs,
+      {
+        id: Date.now(),
+        fileName: mode === 'convert' ? 'New Disc Image.cue' : 'EBOOT.PBP',
+        mode,
+        status: 'pending'
+      }
+    ];
+  }
+
+  function clearQueue() {
+    jobs = [];
+  }
+
+  function runAll() {
+    jobs = jobs.map((job) => ({ ...job, status: 'done' }));
   }
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
+<svelte:head>
+  <title>PopForge</title>
+</svelte:head>
 
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
-  </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
+<main class="app">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">PSX · PSP · Vita</p>
+      <h1>PopForge</h1>
+    </div>
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
+    <div class="mode-toggle" aria-label="Mode">
+      <button
+        class:active={mode === 'convert'}
+        on:click={() => (mode = 'convert')}
+      >
+        Convert
+      </button>
+
+      <button
+        class:active={mode === 'extract'}
+        on:click={() => (mode = 'extract')}
+      >
+        Extract
+      </button>
+    </div>
+  </header>
+
+  <section class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Input</h2>
+
+        <button class="drop-zone" on:click={addMockJob}>
+          <span class="drop-title">
+            {mode === 'convert' ? 'Drop ISO / BIN+CUE here' : 'Drop EBOOT.PBP here'}
+          </span>
+          <span class="drop-subtitle">Click to add a mock job for now</span>
+        </button>
+      </section>
+
+      {#if mode === 'convert'}
+        <section class="panel">
+          <h2>Convert Options</h2>
+
+          <label>
+            Game Name
+            <input bind:value={gameName} placeholder="Tony Hawk's Pro Skater" />
+          </label>
+
+          <label>
+            Game ID
+            <div class="inline">
+              <input bind:value={gameId} />
+              <button type="button">Auto</button>
+            </div>
+          </label>
+
+          <label>
+            Compression
+            <select bind:value={compression}>
+              {#each Array.from({ length: 10 }, (_, i) => i) as level}
+                <option value={level}>{level}</option>
+              {/each}
+            </select>
+          </label>
+
+          <label>
+            Output Filename Template
+            <input bind:value={outputTemplate} />
+          </label>
+        </section>
+      {:else}
+        <section class="panel">
+          <h2>Extract Options</h2>
+
+          <p class="muted">
+            Extract mode will unpack an existing EBOOT.PBP back into a disc image.
+          </p>
+        </section>
+      {/if}
+    </aside>
+
+    <section class="main-panel">
+      <section class="panel queue-panel">
+        <div class="panel-header">
+          <h2>Queue</h2>
+
+          <div class="actions">
+            <button on:click={clearQueue}>Clear</button>
+            <button class="primary" on:click={runAll}>Run All</button>
+          </div>
+        </div>
+
+        {#if jobs.length === 0}
+          <div class="empty">
+            No jobs yet. Add files from the input panel.
+          </div>
+        {:else}
+          <div class="jobs">
+            {#each jobs as job}
+              <article class="job">
+                <div>
+                  <strong>{job.fileName}</strong>
+                  <span>{job.mode}</span>
+                </div>
+
+                <span class:done={job.status === 'done'} class="status">
+                  {job.status}
+                </span>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section class="panel log-panel">
+        <h2>Log</h2>
+        <pre>[ready] PopForge initialized.
+[info] Conversion engine will be connected next.</pre>
+      </section>
+    </section>
+  </section>
 </main>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+  :global(body) {
+    margin: 0;
+    background:
+      radial-gradient(circle at top left, rgba(91, 156, 246, 0.14), transparent 26rem),
+      #1a1a1a;
+    color: #f2f2f2;
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      'Liberation Mono',
+      'Courier New',
+      monospace;
   }
 
-  a:hover {
-    color: #24c8db;
+  :global(button),
+  :global(input),
+  :global(select) {
+    font: inherit;
+  }
+
+  .app {
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    color: #5b9cf6;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 32px;
+    line-height: 1;
+  }
+
+  h2 {
+    margin: 0 0 14px;
+    font-size: 15px;
+  }
+
+  .mode-toggle {
+    display: flex;
+    padding: 4px;
+    border: 1px solid #333;
+    border-radius: 999px;
+    background: #242424;
+  }
+
+  button {
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #2c2c2c;
+    color: #f2f2f2;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+
+  button:hover {
+    border-color: #5b9cf6;
+    color: #8bbcff;
+  }
+
+  button.active,
+  button.primary {
+    border-color: #5b9cf6;
+    background: #5b9cf6;
+    color: #08111f;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 16px;
+  }
+
+  .sidebar,
+  .main-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .panel {
+    border: 1px solid #333;
+    border-radius: 14px;
+    background: rgba(36, 36, 36, 0.86);
+    padding: 16px;
+  }
+
+  .drop-zone {
+    width: 100%;
+    min-height: 150px;
+    border: 1px dashed #5b9cf6;
+    background: rgba(91, 156, 246, 0.07);
+    display: grid;
+    place-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .drop-title {
+    display: block;
+    font-weight: 700;
+  }
+
+  .drop-subtitle,
+  .muted {
+    color: #a0a0a0;
+    font-size: 13px;
+  }
+
+  label {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+    color: #a0a0a0;
+    font-size: 13px;
   }
 
   input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  select {
+    width: 100%;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #1a1a1a;
+    color: #f2f2f2;
+    padding: 9px 10px;
   }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
 
+  input:focus,
+  select:focus {
+    outline: none;
+    border-color: #5b9cf6;
+  }
+
+  .inline {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .panel-header,
+  .actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .queue-panel {
+    min-height: 330px;
+  }
+
+  .empty {
+    display: grid;
+    min-height: 230px;
+    place-items: center;
+    color: #777;
+    border: 1px dashed #333;
+    border-radius: 10px;
+  }
+
+  .jobs {
+    display: grid;
+    gap: 8px;
+  }
+
+  .job {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #333;
+    border-radius: 10px;
+    background: rgba(26, 26, 26, 0.65);
+  }
+
+  .job strong,
+  .job span {
+    display: block;
+  }
+
+  .job span {
+    color: #a0a0a0;
+    font-size: 12px;
+  }
+
+  .status {
+    color: #a0a0a0;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+
+  .status.done {
+    color: #6ee785;
+  }
+
+  .log-panel {
+    flex: 1;
+  }
+
+  pre {
+    min-height: 150px;
+    margin: 0;
+    overflow: auto;
+    color: #a0a0a0;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  @media (max-width: 880px) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+
+    .topbar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
 </style>
