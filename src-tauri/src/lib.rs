@@ -764,7 +764,9 @@ fn resolve_tool_path(tool: &str, custom_path: Option<&str>) -> PathBuf {
                 d.join("bin").join(&bare),
                 d.join("bin").join(&suffixed),
                 d.join("Resources").join(&suffixed),
+                d.join("Resources").join("bin").join(&suffixed),
                 d.join("../Resources").join(&suffixed),
+                d.join("../Resources").join("bin").join(&suffixed),
             ];
 
             for candidate in candidates {
@@ -1250,9 +1252,11 @@ fn scrape_metadata_blocking(app: &tauri::AppHandle, file_name: &str) -> GameMeta
     let serial = match extract_serial_from_filename(file_name) {
         Some(serial) => serial,
         None => {
+            let title = extract_title_from_filename(file_name)
+                .unwrap_or_else(|| "Unknown title".to_string());
             return GameMetadata {
                 serial: String::new(),
-                title: "Unknown title".to_string(),
+                title,
                 region: "Unknown".to_string(),
                 cover_path: None,
                 source: "no-serial".to_string(),
