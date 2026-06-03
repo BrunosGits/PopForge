@@ -33,7 +33,6 @@ export type ConversionOptions = {
   outputTemplate: string;
   outputFolder: string;
   popstationPath: string;
-  chdmanPath: string;
   icon0Path: string;
   pic0Path: string;
   pic1Path: string;

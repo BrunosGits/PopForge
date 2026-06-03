@@ -39,15 +39,15 @@
         readonly
         placeholder="Bundled default"
       />
-      <button type="button" on:click={() => onChooseAsset('icon0')} disabled={isRunning}>
+      <button type="button" onclick={() => onChooseAsset('icon0')} disabled={isRunning}>
         Choose
       </button>
     </div>
     <div class="asset-actions">
-      <button type="button" on:click={() => onResetAsset('icon0')} disabled={isRunning}>
+      <button type="button" onclick={() => onResetAsset('icon0')} disabled={isRunning}>
         Reset
       </button>
-      <button type="button" on:click={() => { previewAsset = previewAsset === 'icon0' ? null : 'icon0'; }} disabled={isRunning}>
+      <button type="button" onclick={() => { previewAsset = previewAsset === 'icon0' ? null : 'icon0'; }} disabled={isRunning}>
         Preview
       </button>
     </div>
@@ -61,15 +61,15 @@
         readonly
         placeholder="Bundled default"
       />
-      <button type="button" on:click={() => onChooseAsset('pic0')} disabled={isRunning}>
+      <button type="button" onclick={() => onChooseAsset('pic0')} disabled={isRunning}>
         Choose
       </button>
     </div>
     <div class="asset-actions">
-      <button type="button" on:click={() => onResetAsset('pic0')} disabled={isRunning}>
+      <button type="button" onclick={() => onResetAsset('pic0')} disabled={isRunning}>
         Reset
       </button>
-      <button type="button" on:click={() => { previewAsset = previewAsset === 'pic0' ? null : 'pic0'; }} disabled={isRunning}>
+      <button type="button" onclick={() => { previewAsset = previewAsset === 'pic0' ? null : 'pic0'; }} disabled={isRunning}>
         Preview
       </button>
     </div>
@@ -83,15 +83,15 @@
         readonly
         placeholder="Bundled default"
       />
-      <button type="button" on:click={() => onChooseAsset('pic1')} disabled={isRunning}>
+      <button type="button" onclick={() => onChooseAsset('pic1')} disabled={isRunning}>
         Choose
       </button>
     </div>
     <div class="asset-actions">
-      <button type="button" on:click={() => onResetAsset('pic1')} disabled={isRunning}>
+      <button type="button" onclick={() => onResetAsset('pic1')} disabled={isRunning}>
         Reset
       </button>
-      <button type="button" on:click={() => { previewAsset = previewAsset === 'pic1' ? null : 'pic1'; }} disabled={isRunning}>
+      <button type="button" onclick={() => { previewAsset = previewAsset === 'pic1' ? null : 'pic1'; }} disabled={isRunning}>
         Preview
       </button>
     </div>
@@ -108,7 +108,7 @@
       {:else}
         <p class="muted">No custom image selected. Preview shows bundled default only when set in the temp staging folder.</p>
       {/if}
-      <button type="button" on:click={() => (previewAsset = null)}>Close Preview</button>
+      <button type="button" onclick={() => (previewAsset = null)}>Close Preview</button>
     </div>
   {/if}
 </section>

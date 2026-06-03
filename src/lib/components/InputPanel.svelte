@@ -22,9 +22,9 @@
   <section class="panel">
     <h2>Input</h2>
 
-    <button class="drop-zone" on:click={onAddJobs} disabled={isRunning}>
+    <button class="drop-zone" onclick={onAddJobs} disabled={isRunning}>
       <span class="drop-title">
-        {mode === 'convert' ? 'Drop ISO / BIN+CUE / CHD here' : 'Drop EBOOT.PBP here'}
+        {mode === 'convert' ? 'Drop ISO / BIN+CUE here' : 'Drop EBOOT.PBP here'}
       </span>
       <span class="drop-subtitle">Click to add files to the queue</span>
     </button>
@@ -33,7 +33,7 @@
   <section class="panel">
     <div class="panel-header">
       <h2>Toolchain</h2>
-      <button type="button" on:click={onRefreshTools} disabled={isRunning}>
+      <button type="button" onclick={onRefreshTools} disabled={isRunning}>
         Check Tools
       </button>
     </div>
@@ -56,11 +56,8 @@
     </div>
 
     <div class="tool-actions">
-      <button type="button" on:click={() => onChooseToolPath('psxpackager')} disabled={isRunning}>
+      <button type="button" onclick={() => onChooseToolPath('psxpackager')} disabled={isRunning}>
         Set PSXPackager
-      </button>
-      <button type="button" on:click={() => onChooseToolPath('chdman')} disabled={isRunning}>
-        Set chdman
       </button>
     </div>
   </section>

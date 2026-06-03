@@ -32,7 +32,7 @@
     Game ID
     <div class="inline">
       <input bind:value={gameId} />
-      <button type="button" on:click={onAutoGameId}>Auto</button>
+      <button type="button" onclick={onAutoGameId}>Auto</button>
     </div>
   </label>
 
@@ -54,15 +54,11 @@
     Output Folder
     <div class="inline">
       <input bind:value={outputFolder} readonly />
-      <button type="button" on:click={onChooseOutputFolder} disabled={isRunning}>
+      <button type="button" onclick={onChooseOutputFolder} disabled={isRunning}>
         Browse
       </button>
     </div>
   </label>
-
-  <p class="muted">
-    CHD inputs are normalized with chdman before PopForge runs PSXPackager.
-  </p>
 </section>
 
 <style>
@@ -106,11 +102,6 @@
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 8px;
-  }
-
-  .muted {
-    color: #a0a0a0;
-    font-size: 13px;
   }
 
   button {

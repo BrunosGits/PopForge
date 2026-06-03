@@ -20,7 +20,6 @@
   let compression = $state(0);
   let outputTemplate = $state('{SERIAL}_{TITLE}');
   let popstationPath = $state('');
-  let chdmanPath = $state('');
   let icon0Path = $state('');
   let pic0Path = $state('');
   let pic1Path = $state('');
@@ -62,15 +61,12 @@
   }
 
   async function refreshToolchainStatus() {
-    const [popstation, chd] = await invokeCommand<ToolStatus[]>('get_toolchain_status', {
-      popstationPath: popstationPath || null,
-      chdmanPath: chdmanPath || null
+    const [popstation] = await invokeCommand<ToolStatus[]>('get_toolchain_status', {
+      popstationPath: popstationPath || null
     });
-    toolchain = [popstation, chd];
+    toolchain = [popstation];
     popstationPath = popstation.path || popstationPath;
-    chdmanPath = chd.path || chdmanPath;
     if (popstation.available && !popstationPath) popstationPath = popstation.path || '';
-    if (chd.available && !chdmanPath) chdmanPath = chd.path || '';
   }
 
   async function addJobs() {
@@ -79,11 +75,11 @@
       return;
     }
 
-    const filterName = mode === 'extract' ? 'PBP' : 'ISO/BIN/CUE/CHD';
+    const filterName = mode === 'extract' ? 'PBP' : 'ISO/BIN/CUE';
 
     const selected = await open({
       multiple: true,
-      filters: [{ name: filterName, extensions: mode === 'extract' ? ['pbp'] : ['iso', 'bin', 'cue', 'chd'] }]
+      filters: [{ name: filterName, extensions: mode === 'extract' ? ['pbp'] : ['iso', 'bin', 'cue'] }]
     });
 
     if (!selected) return;
@@ -164,7 +160,6 @@
       const path = selected as string;
       await invokeCommand('print_file_path', { path, toolName });
       if (toolName === 'psxpackager') popstationPath = path;
-      else chdmanPath = path;
       appendLog(`[info] ${toolName} path set to ${path}`);
       await refreshToolchainStatus();
     }
@@ -202,7 +197,6 @@
           outputTemplate,
           outputFolder,
           popstationPath,
-          chdmanPath,
           icon0Path,
           pic0Path,
           pic1Path
@@ -314,6 +308,7 @@
       <QueuePanel
         {jobs}
         {progress}
+        {mode}
         isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
         onRunAll={runAll}
         onClearQueue={clearQueue}

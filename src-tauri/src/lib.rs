@@ -65,7 +65,6 @@ struct ConversionOptions {
     output_template: String,
     output_folder: String,
     popstation_path: Option<String>,
-    chdman_path: Option<String>,
     icon0_path: Option<String>,
     pic0_path: Option<String>,
     pic1_path: Option<String>,
@@ -75,7 +74,6 @@ struct ConversionOptions {
 #[serde(rename_all = "camelCase")]
 struct ToolPaths {
     popstation_path: Option<String>,
-    chdman_path: Option<String>,
 }
 
 // Learn more about Tauri commands
@@ -110,27 +108,14 @@ fn get_toolchain_status(paths: Option<ToolPaths>) -> Vec<ToolStatus> {
     let custom_psxpackager = paths
         .as_ref()
         .and_then(|paths| paths.popstation_path.as_deref());
-    let custom_chdman = paths
-        .as_ref()
-        .and_then(|paths| paths.chdman_path.as_deref());
     let psxpackager_program = resolve_psxpackager_path(custom_psxpackager)
         .to_string_lossy()
         .to_string();
-    let chdman_program = resolve_chdman_path(custom_chdman)
-        .to_string_lossy()
-        .to_string();
-    vec![
-        tool_status_with_program(
-            "psxpackager",
-            psxpackager_program,
-            custom_psxpackager.is_some(),
-        ),
-        tool_status_with_program(
-            "chdman",
-            chdman_program,
-            custom_chdman.is_some(),
-        ),
-    ]
+    vec![tool_status_with_program(
+        "psxpackager",
+        psxpackager_program,
+        custom_psxpackager.is_some(),
+    )]
 }
 
 #[tauri::command]
@@ -478,54 +463,11 @@ fn build_conversion_pipeline(
     let psxpackager_program = resolve_psxpackager_path(options.popstation_path.as_deref())
         .to_string_lossy()
         .to_string();
-    let chdman_program = resolve_chdman_path(options.chdman_path.as_deref())
-        .to_string_lossy()
-        .to_string();
-    let mut required_tools = vec![ToolRequirement {
+    let required_tools = vec![ToolRequirement {
         name: "psxpackager",
         program: psxpackager_program.clone(),
     }];
-    let mut psxpackager_input = input_path.to_path_buf();
-
-    if has_extension(input_path, "chd") {
-        required_tools.insert(
-            0,
-            ToolRequirement {
-                name: "chdman",
-                program: chdman_program.clone(),
-            },
-        );
-        let normalized_stem = input_path
-            .file_stem()
-            .and_then(|name| name.to_str())
-            .unwrap_or("popforge-normalized");
-        let normalized_dir = std::env::temp_dir().join("popforge").join(normalized_stem);
-        let normalized_cue = normalized_dir.join(format!("{}.cue", normalized_stem));
-        let normalized_bin = normalized_dir.join(format!("{}.bin", normalized_stem));
-
-        steps.push(CommandStep {
-            program: chdman_program.clone(),
-            args: vec![
-                "extractcd".to_string(),
-                "-i".to_string(),
-                input_path.to_string_lossy().to_string(),
-                "-o".to_string(),
-                normalized_cue.to_string_lossy().to_string(),
-                "-ob".to_string(),
-                normalized_bin.to_string_lossy().to_string(),
-                "-f".to_string(),
-            ],
-            stage: "chdman".to_string(),
-        });
-        preview.push(format!(
-            "\"{}\" extractcd -i \"{}\" -o \"{}\" -ob \"{}\" -f",
-            chdman_program,
-            input_path.display(),
-            normalized_cue.display(),
-            normalized_bin.display()
-        ));
-        psxpackager_input = normalized_cue;
-    }
+    let psxpackager_input = input_path.to_path_buf();
 
     let output_dir = Path::new(output_path)
         .parent()
@@ -637,10 +579,6 @@ fn first_missing_tool(tools: &[ToolRequirement]) -> Option<String> {
                 "PSXPackager was not found at '{}'. Place the PSXPackager binary at src-tauri/bin/PSXPackager, set a custom path in the UI, or install PSXPackager on PATH.",
                 tool.program
             ),
-            "chdman" => format!(
-                "chdman was not found at '{}'. chdman support is currently disabled.",
-                tool.program
-            ),
             _ => {
                 if tool.program == tool.name {
                     tool.name.to_string()
@@ -732,10 +670,6 @@ fn resolve_tool_path(tool: &str, custom_path: Option<&str>) -> PathBuf {
 
 fn resolve_psxpackager_path(custom_path: Option<&str>) -> PathBuf {
     resolve_tool_path("PSXPackager", custom_path)
-}
-
-fn resolve_chdman_path(custom_path: Option<&str>) -> PathBuf {
-    resolve_tool_path("chdman", custom_path)
 }
 
 fn run_tool_probe(program: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
@@ -866,13 +800,6 @@ fn tool_status_with_program(tool: &str, program: String, has_custom_path: bool) 
             path: Some(program),
         },
     }
-}
-
-fn has_extension(path: &Path, extension: &str) -> bool {
-    path.extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case(extension))
-        .unwrap_or(false)
 }
 
 fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {

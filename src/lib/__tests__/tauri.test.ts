@@ -49,7 +49,7 @@ describe('invokeCommand', () => {
 
   it('returns stub for get_toolchain_status when not in Tauri', async () => {
     const result = await invokeCommand<Array<{ name: string; available: boolean }>>('get_toolchain_status');
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(1);
     expect(result[0].name).toBe('psxpackager');
   });
 

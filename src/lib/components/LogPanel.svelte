@@ -72,16 +72,16 @@
             class="filter-btn"
             class:active={filter === level}
             style:color={filter === level ? levelColor(level) : undefined}
-            on:click={() => (filter = level)}
+            onclick={() => (filter = level)}
           >
             {level}
           </button>
         {/each}
       </div>
-      <button on:click={copyLog} disabled={isRunning}>
+      <button onclick={copyLog} disabled={isRunning}>
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <button on:click={onTestBackend} disabled={isRunning}>
+      <button onclick={onTestBackend} disabled={isRunning}>
         Test Backend
       </button>
     </div>

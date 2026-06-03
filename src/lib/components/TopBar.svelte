@@ -13,7 +13,7 @@
   <div class="mode-toggle">
     <button
       class:active={mode === 'convert'}
-      on:click={() => (mode = 'convert')}
+      onclick={() => (mode = 'convert')}
       disabled={isRunning}
     >
       Convert
@@ -21,7 +21,7 @@
 
     <button
       class:active={mode === 'extract'}
-      on:click={() => (mode = 'extract')}
+      onclick={() => (mode = 'extract')}
       disabled={isRunning}
     >
       Extract

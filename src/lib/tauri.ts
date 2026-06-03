@@ -16,8 +16,7 @@ export function invokeCommand<T>(command: string, args?: Record<string, unknown>
 
     if (command === 'get_toolchain_status') {
       return Promise.resolve([
-        { name: 'psxpackager', available: false, detail: 'Tool probing runs inside Tauri.', path: null },
-        { name: 'chdman', available: false, detail: 'Tool probing runs inside Tauri.', path: null }
+        { name: 'psxpackager', available: false, detail: 'Tool probing runs inside Tauri.', path: null }
       ] as T);
     }
 

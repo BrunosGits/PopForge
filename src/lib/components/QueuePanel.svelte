@@ -1,16 +1,18 @@
 <script lang="ts">
   import { convertFileSrc } from '@tauri-apps/api/core';
-  import type { Job, ConversionProgress } from '$lib/types';
+  import type { Job, ConversionProgress, Mode } from '$lib/types';
 
   let {
     jobs,
     progress,
+    mode,
     isRunning,
     onRunAll,
     onClearQueue
   }: {
     jobs: Job[];
     progress: ConversionProgress;
+    mode: Mode;
     isRunning: boolean;
     onRunAll: () => void;
     onClearQueue: () => void;
@@ -20,7 +22,7 @@
     if (progress.total === 0) return 0;
     if (progress.stage === 'completed') return 100;
     const base = (Math.max(progress.current, 1) - 1) / progress.total;
-    const step = progress.stage === 'starting' ? 0.05 : progress.stage === 'chdman' ? 0.15 : 0.3;
+    const step = progress.stage === 'starting' ? 0.05 : 0.3;
     return Math.min(100, Math.round((base + step / progress.total) * 100));
   }
 </script>
@@ -29,8 +31,8 @@
   <div class="panel-header">
     <h2>Queue</h2>
     <div class="actions">
-      <button on:click={onClearQueue} disabled={isRunning || jobs.length === 0}>Clear</button>
-      <button class="primary" on:click={onRunAll} disabled={isRunning || jobs.length === 0}>
+      <button onclick={onClearQueue} disabled={isRunning || jobs.length === 0}>Clear</button>
+      <button class="primary" onclick={onRunAll} disabled={isRunning || jobs.length === 0}>
         {isRunning ? 'Running...' : 'Run All'}
       </button>
     </div>
@@ -45,7 +47,7 @@
           {:else if progress.stage === 'completed'}
             Finished
           {:else}
-            Converting {progress.current} of {progress.total}
+            {mode === 'convert' ? 'Converting' : 'Extracting'} {progress.current} of {progress.total}
           {/if}
         </span>
         <span class="progress-percent">{Math.round(queuePercent())}%</span>
@@ -56,7 +58,7 @@
       {#if progress.fileName}
         <p class="progress-file">
           {progress.fileName}
-          {#if progress.stage === 'chdman' || progress.stage === 'psxpackager'}
+          {#if progress.stage === 'psxpackager'}
             <span class="muted">· {progress.stage}</span>
           {/if}
         </p>
