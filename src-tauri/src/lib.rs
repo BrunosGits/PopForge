@@ -695,9 +695,6 @@ fn run_tool_probe(program: &str, args: &[&str]) -> std::io::Result<std::process:
 }
 
 struct StagedAssets {
-    icon0: PathBuf,
-    pic0: PathBuf,
-    pic1: PathBuf,
     temp_dir: PathBuf,
 }
 
@@ -755,16 +752,11 @@ fn stage_psp_assets(
     fs::create_dir_all(&pic1_subdir)
         .map_err(|error| format!("Could not create {}: {}", pic1_subdir.display(), error))?;
 
-    let icon0_path = stage_single_asset(&resources, "ICON0.PNG", icon0, &icon0_subdir)?;
-    let pic0_path = stage_single_asset(&resources, "PIC0.PNG", pic0, &pic0_subdir)?;
-    let pic1_path = stage_single_asset(&resources, "PIC1.PNG", pic1, &pic1_subdir)?;
+    stage_single_asset(&resources, "ICON0.PNG", icon0, &icon0_subdir)?;
+    stage_single_asset(&resources, "PIC0.PNG", pic0, &pic0_subdir)?;
+    stage_single_asset(&resources, "PIC1.PNG", pic1, &pic1_subdir)?;
 
-    Ok(StagedAssets {
-        icon0: icon0_path,
-        pic0: pic0_path,
-        pic1: pic1_path,
-        temp_dir,
-    })
+    Ok(StagedAssets { temp_dir })
 }
 
 fn stage_single_asset(
