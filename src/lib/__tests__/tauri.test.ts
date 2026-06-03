@@ -39,7 +39,7 @@ describe('invokeCommand', () => {
 
   it('returns stub for get_settings when not in Tauri', async () => {
     const result = await invokeCommand<{ lastOutputFolder: string }>('get_settings');
-    expect(result).toEqual({ lastOutputFolder: '' });
+    expect(result).toEqual({ lastOutputFolder: '', gameName: '', gameId: '', windowWidth: 800, windowHeight: 600 });
   });
 
   it('returns stub for scrape_metadata when not in Tauri', async () => {

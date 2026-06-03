@@ -30,7 +30,7 @@ export function invokeCommand<T>(command: string, args?: Record<string, unknown>
     }
 
     if (command === 'get_settings') {
-      return Promise.resolve({ lastOutputFolder: '' } as T);
+      return Promise.resolve({ lastOutputFolder: '', gameName: '', gameId: '', windowWidth: 800, windowHeight: 600 } as T);
     }
 
     if (command === 'save_settings') {

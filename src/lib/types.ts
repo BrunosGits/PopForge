@@ -62,4 +62,16 @@ export type AppSettings = {
   lastMode: string;
   compression: number;
   outputTemplate: string;
+  gameName: string;
+  gameId: string;
+  windowWidth: number;
+  windowHeight: number;
+};
+
+export type ToastType = 'success' | 'error' | 'info';
+
+export type ToastNotification = {
+  id: number;
+  type: ToastType;
+  message: string;
 };

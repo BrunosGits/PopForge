@@ -3,7 +3,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
   import { invokeCommand, onProgress, isTauriRuntime } from '$lib/tauri';
-  import type { Mode, Job, ToolStatus, ConversionProgress, GameMetadata, AppSettings } from '$lib/types';
+  import type { Mode, Job, ToolStatus, ConversionProgress, GameMetadata, AppSettings, ToastNotification, ToastType } from '$lib/types';
   import TopBar from '$lib/components/TopBar.svelte';
   import InputPanel from '$lib/components/InputPanel.svelte';
   import ConvertOptions from '$lib/components/ConvertOptions.svelte';
@@ -11,6 +11,7 @@
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import LogPanel from '$lib/components/LogPanel.svelte';
   import AboutDialog from '$lib/components/AboutDialog.svelte';
+  import Toast from '$lib/components/Toast.svelte';
 
   let mode: Mode = $state('convert');
   let outputFolder = $state('');
@@ -48,9 +49,25 @@
   let collapsedOptions = $state(true);
   let collapsedAssets = $state(true);
 
+  let toasts: ToastNotification[] = $state([]);
+
+  function showToast(type: ToastType, message: string) {
+    const id = Date.now() + Math.random();
+    toasts = [...toasts, { id, type, message }];
+    setTimeout(() => {
+      toasts = toasts.filter((t) => t.id !== id);
+    }, 3000);
+  }
+
+  function dismissToast(id: number) {
+    toasts = toasts.filter((t) => t.id !== id);
+  }
+
   $effect(() => {
     const _mode = mode;
     const _compression = compression;
+    const _gameName = gameName;
+    const _gameId = gameId;
     if (isTauriRuntime()) {
       saveSettings();
     }
@@ -84,6 +101,8 @@
     if (settings.lastMode === 'convert' || settings.lastMode === 'extract') mode = settings.lastMode;
     if (settings.compression !== undefined) compression = settings.compression;
     if (settings.outputTemplate) outputTemplate = settings.outputTemplate;
+    if (settings.gameName) gameName = settings.gameName;
+    if (settings.gameId) gameId = settings.gameId;
   }
 
   async function saveSettings() {
@@ -92,7 +111,11 @@
         lastOutputFolder: outputFolder,
         lastMode: mode,
         compression,
-        outputTemplate
+        outputTemplate,
+        gameName,
+        gameId,
+        windowWidth: 800,
+        windowHeight: 600
       } as AppSettings
     });
   }
@@ -127,6 +150,7 @@
     jobs = [...jobs, ...newJobs];
     collapsedQueue = false;
     appendLog(`[info] Added ${newJobs.length} file(s) to the queue.`);
+    showToast('info', `Added ${newJobs.length} file(s)`);
 
     if (!outputFolder && newJobs.length > 0) {
       const firstFile = newJobs[0].filePath;
@@ -263,6 +287,9 @@
   async function runAll() {
     if (jobs.length === 0) return;
 
+    let succeeded = 0;
+    let failed = 0;
+
     for (const job of jobs) {
       if (job.status !== 'pending') continue;
 
@@ -299,10 +326,26 @@
           outputPath: result.output_path,
           commandPreview: result.command_preview
         });
+
+        if (result.success) {
+          succeeded++;
+          showToast('success', `${job.fileName} done`);
+        } else {
+          failed++;
+          showToast('error', `${job.fileName} failed`);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         updateJob(job.id, { status: 'error', message });
+        failed++;
+        showToast('error', `${job.fileName}: ${message}`);
       }
+    }
+
+    if (succeeded > 0 && failed === 0) {
+      showToast('success', 'All jobs finished');
+    } else if (failed > 0) {
+      showToast('error', `${failed} job(s) failed`);
     }
   }
 
@@ -425,6 +468,8 @@
       />
     {/if}
   </div>
+
+  <Toast notifications={toasts} onDismiss={dismissToast} />
 
   <button class="log-toggle" onclick={() => (showLog = !showLog)}>
     {showLog ? 'Hide Logs' : 'Show Logs'}

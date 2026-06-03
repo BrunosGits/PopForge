@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, PhysicalSize, Size, WindowEvent};
 
 // Global state
 static LAST_FILE: Mutex<String> = Mutex::new(String::new());
@@ -26,7 +26,7 @@ struct ToolStatus {
     path: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppSettings {
     #[serde(default)]
@@ -37,10 +37,41 @@ struct AppSettings {
     compression: u8,
     #[serde(default)]
     output_template: String,
+    #[serde(default)]
+    game_name: String,
+    #[serde(default)]
+    game_id: String,
+    #[serde(default = "default_window_width")]
+    window_width: u32,
+    #[serde(default = "default_window_height")]
+    window_height: u32,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            last_output_folder: String::new(),
+            last_mode: String::new(),
+            compression: 0,
+            output_template: String::new(),
+            game_name: String::new(),
+            game_id: String::new(),
+            window_width: 800,
+            window_height: 600,
+        }
+    }
 }
 
 fn default_compression() -> u8 {
     0
+}
+
+fn default_window_width() -> u32 {
+    800
+}
+
+fn default_window_height() -> u32 {
+    600
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -867,6 +898,24 @@ fn read_settings(app: &tauri::AppHandle) -> AppSettings {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
+        game_name: value
+            .get("game_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        game_id: value
+            .get("game_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        window_width: value
+            .get("window_width")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(800) as u32,
+        window_height: value
+            .get("window_height")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(600) as u32,
     }
 }
 
@@ -883,6 +932,10 @@ fn write_settings(app: &tauri::AppHandle, settings: &AppSettings) -> Result<(), 
         "last_mode": settings.last_mode,
         "compression": settings.compression,
         "output_template": settings.output_template,
+        "game_name": settings.game_name,
+        "game_id": settings.game_id,
+        "window_width": settings.window_width,
+        "window_height": settings.window_height,
     });
     let contents = serde_json::to_string_pretty(&json)
         .map_err(|error| format!("Could not serialize settings: {}", error))?;
@@ -1170,6 +1223,26 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let handle = app.handle();
+            let settings = read_settings(handle);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_size(Size::Physical(PhysicalSize {
+                    width: settings.window_width,
+                    height: settings.window_height,
+                }));
+                let handle_clone = handle.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::Resized(size) = event {
+                        let mut s = read_settings(&handle_clone);
+                        s.window_width = size.width;
+                        s.window_height = size.height;
+                        let _ = write_settings(&handle_clone, &s);
+                    }
+                });
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             test_backend,
