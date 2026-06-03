@@ -428,6 +428,19 @@ fn run_conversion_inner(
         return ConversionResult {
             success: false,
             message,
+            output_path: Some(output_path.clone()),
+            command_preview: Some(command_preview),
+        };
+    }
+
+    let output_file = Path::new(&output_path);
+    if !output_file.exists() {
+        return ConversionResult {
+            success: false,
+            message: format!(
+                "PSXPackager finished but no output file was created at: {}",
+                output_path
+            ),
             output_path: Some(output_path),
             command_preview: Some(command_preview),
         };
@@ -490,12 +503,9 @@ fn build_conversion_pipeline(
         output_dir.clone(),
         "-l".to_string(),
         options.compression.to_string(),
-        "--icon0".to_string(),
-        assets.icon0.to_string_lossy().to_string(),
-        "--pic0".to_string(),
-        assets.pic0.to_string_lossy().to_string(),
-        "--pic1".to_string(),
-        assets.pic1.to_string_lossy().to_string(),
+        "--import".to_string(),
+        "--resource-root".to_string(),
+        assets.temp_dir.to_string_lossy().to_string(),
         "-x".to_string(),
     ];
     steps.push(CommandStep {
@@ -504,14 +514,12 @@ fn build_conversion_pipeline(
         stage: "psxpackager".to_string(),
     });
     preview.push(format!(
-        "\"{}\" -i \"{}\" -o \"{}\" -l {} --icon0 \"{}\" --pic0 \"{}\" --pic1 \"{}\" -x",
+        "\"{}\" -i \"{}\" -o \"{}\" -l {} --import --resource-root \"{}\" -x",
         psxpackager_program,
         psxpackager_input.display(),
         output_dir,
         options.compression,
-        assets.icon0.display(),
-        assets.pic0.display(),
-        assets.pic1.display()
+        assets.temp_dir.display()
     ));
 
     ConversionPipeline {
@@ -736,12 +744,20 @@ fn stage_psp_assets(
     let temp_dir = std::env::temp_dir()
         .join("popforge")
         .join(format!("assets-{}-{}", pid, nanos));
-    fs::create_dir_all(&temp_dir)
-        .map_err(|error| format!("Could not create {}: {}", temp_dir.display(), error))?;
 
-    let icon0_path = stage_single_asset(&resources, "ICON0.PNG", icon0, &temp_dir)?;
-    let pic0_path = stage_single_asset(&resources, "PIC0.PNG", pic0, &temp_dir)?;
-    let pic1_path = stage_single_asset(&resources, "PIC1.PNG", pic1, &temp_dir)?;
+    let icon0_subdir = temp_dir.join("ICON0");
+    let pic0_subdir = temp_dir.join("PIC0");
+    let pic1_subdir = temp_dir.join("PIC1");
+    fs::create_dir_all(&icon0_subdir)
+        .map_err(|error| format!("Could not create {}: {}", icon0_subdir.display(), error))?;
+    fs::create_dir_all(&pic0_subdir)
+        .map_err(|error| format!("Could not create {}: {}", pic0_subdir.display(), error))?;
+    fs::create_dir_all(&pic1_subdir)
+        .map_err(|error| format!("Could not create {}: {}", pic1_subdir.display(), error))?;
+
+    let icon0_path = stage_single_asset(&resources, "ICON0.PNG", icon0, &icon0_subdir)?;
+    let pic0_path = stage_single_asset(&resources, "PIC0.PNG", pic0, &pic0_subdir)?;
+    let pic1_path = stage_single_asset(&resources, "PIC1.PNG", pic1, &pic1_subdir)?;
 
     Ok(StagedAssets {
         icon0: icon0_path,
@@ -755,7 +771,7 @@ fn stage_single_asset(
     resources: &Path,
     default_name: &str,
     user_path: Option<&str>,
-    temp_dir: &Path,
+    dest_dir: &Path,
 ) -> Result<PathBuf, String> {
     let source = match user_path.map(str::trim).filter(|s| !s.is_empty()) {
         Some(user) => PathBuf::from(user),
@@ -766,7 +782,7 @@ fn stage_single_asset(
         return Err(format!("Asset not found: {}", source.display()));
     }
 
-    let dest = temp_dir.join(default_name);
+    let dest = dest_dir.join(default_name);
     fs::copy(&source, &dest)
         .map_err(|error| format!("Could not copy {}: {}", source.display(), error))?;
     Ok(dest)
