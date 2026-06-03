@@ -6,17 +6,22 @@
     jobs,
     progress,
     mode,
+    selectedJobIds,
     isRunning,
     collapsed,
     onToggle,
     onRunAll,
     onClearQueue,
     onRemoveJob,
-    onRetryJob
+    onRetryJob,
+    onToggleSelection,
+    onMergeSelected,
+    onUngroupJob
   }: {
     jobs: Job[];
     progress: ConversionProgress;
     mode: Mode;
+    selectedJobIds: Set<number>;
     isRunning: boolean;
     collapsed: boolean;
     onToggle: () => void;
@@ -24,7 +29,12 @@
     onClearQueue: () => void;
     onRemoveJob: (id: number) => void;
     onRetryJob: (id: number) => void;
+    onToggleSelection: (id: number) => void;
+    onMergeSelected: () => void;
+    onUngroupJob: (id: number) => void;
   } = $props();
+
+  let hoveredGroupId = $state<number | null>(null);
 
   function queuePercent(): number {
     if (progress.total === 0) return 0;
@@ -32,6 +42,27 @@
     const base = (Math.max(progress.current, 1) - 1) / progress.total;
     const step = progress.stage === 'starting' ? 0.05 : 0.3;
     return Math.min(100, Math.round((base + step / progress.total) * 100));
+  }
+
+  function groupInfo(groupId: number): { total: number; index: number } | null {
+    const group = jobs.filter((j) => j.groupId === groupId).sort((a, b) => (a.discIndex ?? 0) - (b.discIndex ?? 0));
+    if (group.length < 2) return null;
+    return { total: group.length, index: 0 };
+  }
+
+  function discLabel(job: Job): string | null {
+    if (job.groupId === null || job.discIndex === null) return null;
+    const info = groupInfo(job.groupId);
+    if (!info) return null;
+    return `Disc ${job.discIndex + 1} of ${info.total}`;
+  }
+
+  function selectedCount(): number {
+    return selectedJobIds.size;
+  }
+
+  function canMerge(): boolean {
+    return selectedCount() >= 2;
   }
 </script>
 
@@ -50,6 +81,15 @@
         {isRunning ? 'Running...' : 'Run All'}
       </button>
     </div>
+
+    {#if selectedCount() > 0}
+      <div class="selection-bar">
+        <span class="selection-count">{selectedCount()} selected</span>
+        {#if canMerge()}
+          <button class="btn-merge" onclick={onMergeSelected} disabled={isRunning}>Merge</button>
+        {/if}
+      </div>
+    {/if}
 
     {#if progress.total > 0}
       <div class="progress" aria-live="polite">
@@ -91,7 +131,28 @@
     {:else}
       <div class="jobs">
         {#each jobs as job}
-          <article class="job">
+          {@const label = discLabel(job)}
+          <article
+            class="job"
+            class:grouped={job.groupId !== null}
+            class:group-highlight={job.groupId !== null && hoveredGroupId === job.groupId}
+            onmouseenter={() => { if (job.groupId !== null) hoveredGroupId = job.groupId; }}
+            onmouseleave={() => { hoveredGroupId = null; }}
+          >
+            <button
+              class="checkbox"
+              class:checked={selectedJobIds.has(job.id)}
+              onclick={() => onToggleSelection(job.id)}
+              disabled={isRunning}
+              aria-label="Select job"
+            >
+              {#if selectedJobIds.has(job.id)}
+                <svg viewBox="0 0 16 16" fill="none" width="12" height="12">
+                  <path d="M4 8l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              {/if}
+            </button>
+
             <div class="job-info">
               {#if job.metadata?.coverPath}
                 <img
@@ -104,6 +165,9 @@
                 <strong>
                   {job.metadata?.title ?? job.fileName}
                 </strong>
+                {#if label}
+                  <span class="disc-badge">{label}</span>
+                {/if}
                 <span class="job-path">{job.filePath}</span>
                 {#if job.metadata?.serial}
                   <span>
@@ -130,6 +194,9 @@
             </div>
 
             <div class="job-actions">
+              {#if job.groupId !== null}
+                <button class="ungroup-btn" onclick={() => onUngroupJob(job.id)} disabled={isRunning} title="Ungroup discs">&times;</button>
+              {/if}
               {#if job.status === 'error'}
                 <button class="retry-btn" onclick={() => onRetryJob(job.id)} disabled={isRunning}>Retry</button>
               {/if}
@@ -252,6 +319,52 @@
     opacity: 0.55;
   }
 
+  .selection-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #EAF2FF;
+    border: 1px solid #BFDBFE;
+  }
+
+  .selection-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2F7DF6;
+    flex: 1;
+  }
+
+  .btn-merge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: 1px solid #2476EE;
+    border-radius: 7px;
+    background: #2F7DF6;
+    color: #FFFFFF;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+
+  .btn-merge:hover {
+    background: #1F6FE5;
+  }
+
+  .btn-merge:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   .empty {
     display: grid;
     min-height: 180px;
@@ -292,24 +405,56 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px;
+    gap: 10px;
+    padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: #F8FAFC;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .job.group-highlight {
+    border-color: #2F7DF6;
+    background: #EAF2FF;
+  }
+
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border: 1.5px solid #D0D5DD;
+    border-radius: 4px;
+    background: #FFFFFF;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .checkbox.checked {
+    border-color: #2F7DF6;
+    background: #2F7DF6;
+  }
+
+  .checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .job-info {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: flex-start;
     flex: 1;
     min-width: 0;
   }
 
   .job-cover {
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
     object-fit: cover;
     border-radius: 6px;
     background: var(--bg-tertiary);
@@ -337,9 +482,22 @@
     font-size: 12px;
   }
 
+  .disc-badge {
+    display: inline-block !important;
+    margin: 2px 0 4px;
+    padding: 1px 7px;
+    border: 1px solid #2F7DF6;
+    border-radius: 4px;
+    background: #EAF2FF;
+    color: #2F7DF6;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
   .meta-tag {
-    display: inline-block;
+    display: inline-block !important;
     margin-right: 6px;
+    margin-top: 2px;
     padding: 1px 6px;
     border: 1px solid var(--meta-tag-border);
     border-radius: 4px;
@@ -363,6 +521,7 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
+    flex-shrink: 0;
   }
 
   .status-badge.done {
@@ -382,7 +541,7 @@
 
   .job-actions {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-shrink: 0;
   }
 
@@ -412,8 +571,8 @@
     align-items: center;
     justify-content: center;
     line-height: 1;
-    height: 30px;
-    padding: 0 12px;
+    height: 28px;
+    padding: 0 10px;
     font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.01em;
@@ -429,6 +588,29 @@
   .retry-btn:hover {
     background: #F5F6F8;
     border-color: #C1C7CF;
+  }
+
+  .ungroup-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #D0D5DD;
+    border-radius: 7px;
+    background: #FFFFFF;
+    color: #667085;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .ungroup-btn:hover {
+    background: #F5F6F8;
+    border-color: #C1C7CF;
+    color: #344054;
   }
 
   .progress {

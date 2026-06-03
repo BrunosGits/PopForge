@@ -36,6 +36,7 @@ export type ConversionOptions = {
   icon0Path: string;
   pic0Path: string;
   pic1Path: string;
+  discPaths: string[];
 };
 
 export type ToolStatus = {
@@ -55,6 +56,8 @@ export type Job = {
   outputPath: string | null;
   commandPreview: string | null;
   metadata: GameMetadata | null;
+  groupId: number | null;
+  discIndex: number | null;
 };
 
 export type AppSettings = {

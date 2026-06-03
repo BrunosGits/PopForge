@@ -50,6 +50,7 @@
   let collapsedAssets = $state(true);
 
   let toasts: ToastNotification[] = $state([]);
+  let selectedJobIds: Set<number> = $state(new Set());
 
   function showToast(type: ToastType, message: string) {
     const id = Date.now() + Math.random();
@@ -61,6 +62,92 @@
 
   function dismissToast(id: number) {
     toasts = toasts.filter((t) => t.id !== id);
+  }
+
+  const DISC_RE = /\s*[\(\[]\s*(disc|cd|disk)\s*(\d+)\s*[\)\]]|\s*[-–—]\s*(disc|cd|disk)\s*(\d+)\s*$/i;
+
+  function stripDiscIndicator(name: string): string {
+    return name.replace(DISC_RE, '').replace(/\.(iso|bin|cue|pbp)$/i, '').trim();
+  }
+
+  function extractDiscNumber(name: string): number | null {
+    const match = name.match(DISC_RE);
+    if (!match) return null;
+    const num = match[2] || match[4];
+    return num ? parseInt(num, 10) : null;
+  }
+
+  function autoDetectGroups() {
+    const ungrouped = jobs.filter((j) => j.groupId === null && j.status === 'pending');
+    if (ungrouped.length < 2) return;
+
+    const serialGroups = new Map<string, typeof ungrouped>();
+    for (const job of ungrouped) {
+      if (job.metadata?.serial) {
+        const g = serialGroups.get(job.metadata.serial) || [];
+        g.push(job);
+        serialGroups.set(job.metadata.serial, g);
+      }
+    }
+
+    const nameGroups = new Map<string, typeof ungrouped>();
+    for (const job of ungrouped) {
+      if (!job.metadata?.serial) {
+        const key = stripDiscIndicator(job.fileName);
+        const g = nameGroups.get(key) || [];
+        g.push(job);
+        nameGroups.set(key, g);
+      }
+    }
+
+    let nextGroupId = Date.now();
+
+    for (const [, group] of serialGroups) {
+      if (group.length < 2) continue;
+      const gid = nextGroupId++;
+      group.sort((a, b) => (extractDiscNumber(a.fileName) ?? 99) - (extractDiscNumber(b.fileName) ?? 99));
+      group.forEach((job, idx) => updateJob(job.id, { groupId: gid, discIndex: idx }));
+      appendLog(`[info] Auto-grouped ${group.length} discs by serial (${group[0].metadata?.serial})`);
+    }
+
+    for (const [, group] of nameGroups) {
+      if (group.length < 2) continue;
+      const gid = nextGroupId++;
+      group.sort((a, b) => (extractDiscNumber(a.fileName) ?? 99) - (extractDiscNumber(b.fileName) ?? 99));
+      group.forEach((job, idx) => updateJob(job.id, { groupId: gid, discIndex: idx }));
+      appendLog(`[info] Auto-grouped ${group.length} discs by name`);
+    }
+  }
+
+  function mergeSelectedJobs() {
+    const selected = jobs.filter((j) => selectedJobIds.has(j.id));
+    if (selected.length < 2) return;
+    const gid = Date.now() + Math.random();
+    selected.forEach((job, idx) => updateJob(job.id, { groupId: gid, discIndex: idx }));
+    selectedJobIds = new Set();
+    appendLog(`[info] Merged ${selected.length} jobs into a disc group`);
+  }
+
+  function ungroupJob(jobId: number) {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job || job.groupId === null) return;
+    const gid = job.groupId;
+    for (const j of jobs) {
+      if (j.groupId === gid) {
+        updateJob(j.id, { groupId: null, discIndex: null });
+      }
+    }
+    appendLog(`[info] Ungrouped disc group`);
+  }
+
+  function toggleJobSelection(id: number) {
+    const next = new Set(selectedJobIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    selectedJobIds = next;
   }
 
   $effect(() => {
@@ -84,10 +171,16 @@
   function clearQueue() {
     if (jobs.length > 0 && !window.confirm('Clear all jobs?')) return;
     jobs = [];
+    selectedJobIds = new Set();
     progress = { current: 0, total: 0, fileName: '', stage: 'idle', filePercent: null };
   }
 
   function removeJob(id: number) {
+    const job = jobs.find((j) => j.id === id);
+    if (job?.groupId !== null) {
+      ungroupJob(id);
+    }
+    selectedJobIds = new Set(Array.from(selectedJobIds).filter((sid) => sid !== id));
     jobs = jobs.filter((j) => j.id !== id);
   }
 
@@ -143,7 +236,9 @@
         message: null,
         outputPath: null,
         commandPreview: null,
-        metadata: null
+        metadata: null,
+        groupId: null,
+        discIndex: null
       });
     }
 
@@ -173,6 +268,8 @@
         appendLog(`[warn] Metadata lookup failed for ${job.fileName}: ${msg}`);
       }
     }
+
+    autoDetectGroups();
   }
 
   async function addJobs() {
@@ -290,9 +387,79 @@
     let succeeded = 0;
     let failed = 0;
 
-    for (const job of jobs) {
-      if (job.status !== 'pending') continue;
+    const pending = jobs.filter((j) => j.status === 'pending');
+    const groups = new Map<number, typeof pending>();
+    const singles: typeof pending = [];
 
+    for (const job of pending) {
+      if (job.groupId !== null) {
+        const g = groups.get(job.groupId) || [];
+        g.push(job);
+        groups.set(job.groupId, g);
+      } else {
+        singles.push(job);
+      }
+    }
+
+    async function runGroup(group: typeof pending) {
+      const primary = group[0];
+      for (const job of group) {
+        updateJob(job.id, { status: 'running', message: null, outputPath: null, commandPreview: null });
+      }
+
+      try {
+        const options = {
+          mode: primary.mode,
+          gameName: primary.metadata?.title || gameName,
+          gameId: primary.metadata?.serial || gameId,
+          compression,
+          outputTemplate,
+          outputFolder,
+          popstationPath,
+          icon0Path,
+          pic0Path,
+          pic1Path,
+          discPaths: group.map((j) => j.filePath)
+        };
+
+        const result = await invokeCommand<{
+          success: boolean;
+          message: string;
+          output_path: string | null;
+          command_preview: string | null;
+        }>('run_conversion', {
+          filePath: primary.filePath,
+          fileName: primary.fileName,
+          options
+        });
+
+        for (const job of group) {
+          updateJob(job.id, {
+            status: result.success ? 'done' : 'error',
+            message: result.message,
+            outputPath: result.output_path,
+            commandPreview: result.command_preview
+          });
+        }
+
+        if (result.success) {
+          succeeded++;
+          showToast('success', `${primary.fileName} (${group.length} discs) done`);
+        } else {
+          failed++;
+          showToast('error', `${primary.fileName} failed`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        for (const job of group) {
+          updateJob(job.id, { status: 'error', message });
+        }
+        failed++;
+        showToast('error', `${primary.fileName}: ${message}`);
+      }
+    }
+
+    async function runSingle(job: (typeof pending)[0]) {
       updateJob(job.id, { status: 'running', message: null, outputPath: null, commandPreview: null });
 
       try {
@@ -306,7 +473,8 @@
           popstationPath,
           icon0Path,
           pic0Path,
-          pic1Path
+          pic1Path,
+          discPaths: [] as string[]
         };
 
         const result = await invokeCommand<{
@@ -340,6 +508,14 @@
         failed++;
         showToast('error', `${job.fileName}: ${message}`);
       }
+    }
+
+    for (const [, group] of groups) {
+      if (group.length > 0) await runGroup(group);
+    }
+
+    for (const job of singles) {
+      await runSingle(job);
     }
 
     if (succeeded > 0 && failed === 0) {
@@ -421,6 +597,7 @@
       {jobs}
       {progress}
       {mode}
+      {selectedJobIds}
       isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
       collapsed={collapsedQueue}
       onToggle={() => (collapsedQueue = !collapsedQueue)}
@@ -428,6 +605,9 @@
       onClearQueue={clearQueue}
       onRemoveJob={removeJob}
       onRetryJob={retryJob}
+      onToggleSelection={toggleJobSelection}
+      onMergeSelected={mergeSelectedJobs}
+      onUngroupJob={ungroupJob}
     />
 
     {#if mode === 'convert'}

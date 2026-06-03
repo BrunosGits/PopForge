@@ -12,6 +12,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -28,23 +30,21 @@ jobs:
 
       - run: npm run tauri build
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "${{ github.ref_name }}" | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --oneline --no-decorate HEAD)
+          else
+            LOG=$(git log --oneline --no-decorate "$PREV_TAG..HEAD" 2>/dev/null || git log --oneline --no-decorate HEAD)
+          fi
+          echo "log<<EOF" >> $GITHUB_OUTPUT
+          echo "$LOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - uses: softprops/action-gh-release@v2
         with:
           files: src-tauri/target/release/bundle/dmg/PopForge_*.dmg
-          generate_release_notes: true
-          body: |
-            ## Unsigned Build
-
-            This app is not code-signed. macOS Gatekeeper will block it when double-clicking.
-
-            **Workaround:** Right-click (or Ctrl+click) the app → **Open** → click **Open** in the dialog. This only needs to be done once — subsequent launches work normally.
-
-            ### Supported inputs
-            - ISO (PS1 disc image)
-            - BIN/CUE (PS1 disc image)
-
-            ### Supported output
-            - PBP (PSP EBOOT.PBP)
-
-            ### Extraction
-            - PBP → BIN+CUE
+          body: ${{ steps.changelog.outputs.log }}
+          prerelease: true

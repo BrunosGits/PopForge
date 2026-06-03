@@ -5,7 +5,7 @@
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="modal">
     <h2>PopForge</h2>
-    <p class="version">v0.3.0</p>
+    <p class="version">v0.4.0-alpha</p>
     <p class="description">
       PS1 ↔ PSP disc image conversion tool.<br />
       Converts PS1 ISO, BIN+CUE to PSP EBOOT.PBP and back.

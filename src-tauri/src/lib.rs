@@ -109,6 +109,8 @@ struct ConversionOptions {
     icon0_path: Option<String>,
     pic0_path: Option<String>,
     pic1_path: Option<String>,
+    #[serde(default)]
+    disc_paths: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -228,6 +230,30 @@ async fn run_conversion(
     result
 }
 
+fn derive_output_name(options: &ConversionOptions, first_path: &Path) -> String {
+    if !options.game_name.is_empty() {
+        return options.game_name.clone();
+    }
+    if !options.game_id.is_empty() {
+        return options.game_id.clone();
+    }
+    let stem = first_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Untitled")
+        .to_string();
+    let re = regex::Regex::new(
+        r"(?i)\s*[\(\[]\s*(disc|cd|disk)\s*\d+\s*[\)\]]|\s*[-–—]\s*(disc|cd|disk)\s*\d+\s*$",
+    )
+    .unwrap();
+    let cleaned = re.replace(&stem, "").trim().to_string();
+    if cleaned.is_empty() {
+        stem
+    } else {
+        cleaned
+    }
+}
+
 fn run_conversion_inner(
     file_path: &str,
     options: &ConversionOptions,
@@ -249,13 +275,24 @@ fn run_conversion_inner(
 
     let input_path = Path::new(file_path);
 
-    if !input_path.exists() {
-        return ConversionResult {
-            success: false,
-            message: format!("Input file not found: {}", file_path),
-            output_path: None,
-            command_preview: None,
-        };
+    let mut all_paths: Vec<&Path> = Vec::new();
+    all_paths.push(input_path);
+    for disc_path in &options.disc_paths {
+        let p = Path::new(disc_path);
+        if !all_paths.iter().any(|existing| *existing == p) {
+            all_paths.push(p);
+        }
+    }
+
+    for p in &all_paths {
+        if !p.exists() {
+            return ConversionResult {
+                success: false,
+                message: format!("Input file not found: {}", p.display()),
+                output_path: None,
+                command_preview: None,
+            };
+        }
     }
 
     if options.output_folder.trim().is_empty() {
@@ -414,12 +451,9 @@ fn run_conversion_inner(
         return result;
     }
 
-    let input_title = input_path
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or("Untitled");
+    let output_name = derive_output_name(options, input_path);
     let output_path = output_folder
-        .join(format!("{}.PBP", input_title))
+        .join(format!("{}.PBP", output_name))
         .to_string_lossy()
         .to_string();
 
@@ -443,7 +477,8 @@ fn run_conversion_inner(
         assets.temp_dir.display()
     );
 
-    let pipeline = build_conversion_pipeline(input_path, &output_path, options, &assets);
+    let is_multi = all_paths.len() > 1;
+    let pipeline = build_conversion_pipeline(&all_paths, &output_path, options, &assets);
     let command_preview = pipeline.preview.join("\n");
 
     if let Some(missing_tool) = first_missing_tool(&pipeline.required_tools) {
@@ -455,7 +490,13 @@ fn run_conversion_inner(
         };
     }
 
-    if let Err(message) = run_pipeline(&pipeline.steps, app, current, total, file_name) {
+    let display_name = if is_multi {
+        format!("{} ({} discs)", file_name, all_paths.len())
+    } else {
+        file_name.to_string()
+    };
+
+    if let Err(message) = run_pipeline(&pipeline.steps, app, current, total, &display_name) {
         return ConversionResult {
             success: false,
             message,
@@ -477,9 +518,17 @@ fn run_conversion_inner(
         };
     }
 
+    let disc_count = all_paths.len();
     ConversionResult {
         success: true,
-        message: format!("Created EBOOT: {}", output_path),
+        message: if is_multi {
+            format!(
+                "Created multi-disc EBOOT ({} discs): {}",
+                disc_count, output_path
+            )
+        } else {
+            format!("Created EBOOT: {}", output_path)
+        },
         output_path: Some(output_path),
         command_preview: Some(command_preview),
     }
@@ -507,7 +556,7 @@ struct ToolRequirement {
 }
 
 fn build_conversion_pipeline(
-    input_path: &Path,
+    input_paths: &[&Path],
     output_path: &str,
     options: &ConversionOptions,
     assets: &StagedAssets,
@@ -521,37 +570,51 @@ fn build_conversion_pipeline(
         name: "psxpackager",
         program: psxpackager_program.clone(),
     }];
-    let psxpackager_input = input_path.to_path_buf();
 
     let output_dir = Path::new(output_path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
-    let psx_args = vec![
-        "-i".to_string(),
-        psxpackager_input.to_string_lossy().to_string(),
-        "-o".to_string(),
-        output_dir.clone(),
-        "-l".to_string(),
-        options.compression.to_string(),
-        "--import".to_string(),
-        "--resource-root".to_string(),
-        assets.temp_dir.to_string_lossy().to_string(),
-        "-x".to_string(),
-    ];
+
+    let mut psx_args: Vec<String> = Vec::new();
+    for p in input_paths {
+        psx_args.push("-i".to_string());
+        psx_args.push(p.to_string_lossy().to_string());
+    }
+    psx_args.push("-o".to_string());
+    psx_args.push(output_dir.clone());
+    psx_args.push("-l".to_string());
+    psx_args.push(options.compression.to_string());
+    psx_args.push("--import".to_string());
+    psx_args.push("--resource-root".to_string());
+    psx_args.push(assets.temp_dir.to_string_lossy().to_string());
+    psx_args.push("-x".to_string());
+
+    let preview_line = {
+        let inputs: Vec<String> = input_paths
+            .iter()
+            .map(|p| format!("\"{}\"", p.display()))
+            .collect();
+        format!(
+            "\"{}\" {} -o \"{}\" -l {} --import --resource-root \"{}\" -x",
+            psxpackager_program,
+            inputs
+                .iter()
+                .flat_map(|s| vec!["-i".to_string(), s.clone()])
+                .collect::<Vec<_>>()
+                .join(" "),
+            output_dir,
+            options.compression,
+            assets.temp_dir.display()
+        )
+    };
+
     steps.push(CommandStep {
         program: psxpackager_program.clone(),
         args: psx_args,
         stage: "psxpackager".to_string(),
     });
-    preview.push(format!(
-        "\"{}\" -i \"{}\" -o \"{}\" -l {} --import --resource-root \"{}\" -x",
-        psxpackager_program,
-        psxpackager_input.display(),
-        output_dir,
-        options.compression,
-        assets.temp_dir.display()
-    ));
+    preview.push(preview_line);
 
     ConversionPipeline {
         steps,
