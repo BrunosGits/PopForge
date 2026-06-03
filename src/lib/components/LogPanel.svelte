@@ -55,10 +55,10 @@
   }
 
   function levelColor(level: LogLevel | 'all'): string {
-    if (level === 'all') return '#a0a0a0';
-    if (level === 'info') return '#8bbcff';
-    if (level === 'warn') return '#ffd580';
-    return '#ff7b7b';
+    if (level === 'all') return '#667085';
+    if (level === 'info') return '#2F7DF6';
+    if (level === 'warn') return '#DC6803';
+    return '#E5484D';
   }
 </script>
 
@@ -78,10 +78,10 @@
           </button>
         {/each}
       </div>
-      <button onclick={copyLog} disabled={isRunning}>
+      <button class="btn-secondary" onclick={copyLog} disabled={isRunning}>
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <button onclick={onTestBackend} disabled={isRunning}>
+      <button class="btn-secondary" onclick={onTestBackend} disabled={isRunning}>
         Test Backend
       </button>
     </div>
@@ -95,7 +95,8 @@
     border: 1px solid var(--border);
     border-radius: 14px;
     background: var(--bg);
-    padding: 16px;
+    padding: 18px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   }
 
   .panel-header {
@@ -117,30 +118,34 @@
     padding: 3px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--bg-tertiary);
+    background: #F8FAFC;
   }
 
   .filter-btn {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--text-secondary);
+    color: #667085;
     padding: 4px 10px;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
   }
 
   .filter-btn:hover {
-    background: var(--accent-bg-hover);
+    background: #F3F6FB;
   }
 
   .filter-btn.active {
-    background: var(--bg-hover);
+    background: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   }
 
   h2 {
     margin: 0;
     font-size: 15px;
+    font-weight: 700;
+    color: #1E2329;
   }
 
   .log-panel {
@@ -152,27 +157,38 @@
     max-height: 400px;
     margin: 0;
     overflow: auto;
-    color: var(--text-secondary);
+    color: #667085;
     line-height: 1.6;
     white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
     font-size: 13px;
   }
 
-  button {
-    border: 1px solid var(--border);
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border: 1px solid #D0D5DD;
     border-radius: 8px;
-    background: var(--bg-hover);
-    color: var(--text);
-    padding: 8px 12px;
+    background: #FFFFFF;
+    color: #344054;
     cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
 
-  button:hover {
-    border-color: var(--accent);
-    color: var(--accent-hover);
+  .btn-secondary:hover {
+    background: #F5F6F8;
+    border-color: #C1C7CF;
   }
 
-  button:disabled {
+  .btn-secondary:disabled {
     cursor: not-allowed;
     opacity: 0.55;
   }

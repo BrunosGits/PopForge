@@ -10,7 +10,7 @@
       <p class="eyebrow">PSX · PSP · Vita</p>
       <h1>PopForge</h1>
     </div>
-    <button class="about-btn" onclick={onAbout}>About</button>
+    <button class="btn-secondary" onclick={onAbout}>About</button>
   </div>
 
   <div class="mode-toggle">
@@ -21,7 +21,6 @@
     >
       Convert
     </button>
-
     <button
       class:active={mode === 'extract'}
       onclick={() => (mode = 'extract')}
@@ -38,82 +37,96 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
   }
 
   .title-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
   }
 
-  .about-btn {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-secondary);
-    padding: 4px 10px;
-    font-size: 12px;
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border: 1px solid #D0D5DD;
+    border-radius: 8px;
+    background: #FFFFFF;
+    color: #344054;
     cursor: pointer;
-    margin-top: 8px;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
 
-  .about-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+  .btn-secondary:hover {
+    background: #F5F6F8;
+    border-color: #C1C7CF;
   }
 
   .eyebrow {
     margin: 0 0 4px;
-    color: var(--accent);
+    color: #2F7DF6;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 600;
   }
 
   h1 {
     margin: 0;
-    font-size: 32px;
-    line-height: 1;
+    font-size: 34px;
+    font-weight: 700;
+    color: #1E2329;
   }
 
   .mode-toggle {
-    display: flex;
-    padding: 4px;
-    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    background: #E4E7ED;
     border-radius: 999px;
-    background: var(--bg-tertiary);
+    padding: 3px;
+    gap: 2px;
+    height: 30px;
   }
 
-  button {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-hover);
-    color: var(--text);
-    padding: 8px 12px;
+  .mode-toggle button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    height: 24px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    background: transparent;
+    color: #667085;
   }
 
-  button:hover {
-    border-color: var(--accent);
-    color: var(--accent-hover);
+  .mode-toggle button.active {
+    background: #2F7DF6;
+    color: #FFFFFF;
+    box-shadow: 0 1px 3px rgba(47, 125, 246, 0.30), 0 1px 1px rgba(0, 0, 0, 0.06);
   }
 
-  button:disabled {
+  .mode-toggle button:not(.active):hover {
+    color: #1E2329;
+  }
+
+  .mode-toggle button:disabled {
     cursor: not-allowed;
     opacity: 0.55;
-  }
-
-  button.active {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--btn-text);
-  }
-
-  @media (max-width: 880px) {
-    .topbar {
-      align-items: flex-start;
-      flex-direction: column;
-    }
   }
 </style>

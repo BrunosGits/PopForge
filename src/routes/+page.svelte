@@ -38,12 +38,15 @@
     filePercent: null
   });
 
-  let toolchain: ToolStatus[] = $state([]);
   let unlistenProgress: UnlistenFn | null = null;
   let unlistenDragDrop: UnlistenFn | null = null;
   let isDragOver = $state(false);
   let showAbout = $state(false);
   let showLog = $state(false);
+
+  let collapsedQueue = $state(true);
+  let collapsedOptions = $state(true);
+  let collapsedAssets = $state(true);
 
   $effect(() => {
     const _mode = mode;
@@ -98,7 +101,6 @@
     const [popstation] = await invokeCommand<ToolStatus[]>('get_toolchain_status', {
       popstationPath: popstationPath || null
     });
-    toolchain = [popstation];
     popstationPath = popstation.path || popstationPath;
     if (popstation.available && !popstationPath) popstationPath = popstation.path || '';
   }
@@ -123,6 +125,7 @@
     }
 
     jobs = [...jobs, ...newJobs];
+    collapsedQueue = false;
     appendLog(`[info] Added ${newJobs.length} file(s) to the queue.`);
 
     if (!outputFolder && newJobs.length > 0) {
@@ -240,17 +243,6 @@
 
   function previewAssetImage(name: string) {
     appendLog(`[info] ${name.toUpperCase()} preview is shown inline below the asset row.`);
-  }
-
-  async function chooseToolPath(toolName: string) {
-    const selected = await open({ filters: [{ name: toolName, extensions: ['*'] }] });
-    if (selected) {
-      const path = selected as string;
-      await invokeCommand('print_file_path', { path, toolName });
-      if (toolName === 'psxpackager') popstationPath = path;
-      appendLog(`[info] ${toolName} path set to ${path}`);
-      await refreshToolchainStatus();
-    }
   }
 
   async function autoGameId() {
@@ -375,63 +367,64 @@
     <AboutDialog onClose={() => (showAbout = false)} />
   {/if}
 
-  <section class="layout">
+  <div class="content">
     <InputPanel
       {mode}
       isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-      {toolchain}
       onAddJobs={addJobs}
-      onRefreshTools={refreshToolchainStatus}
-      onChooseToolPath={chooseToolPath}
     />
 
-    <section class="main-panel">
-      {#if mode === 'convert'}
-        <ConvertOptions
-          bind:gameName
-          bind:gameId
-          bind:compression
-          bind:outputTemplate
-          bind:outputFolder
-          isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-          onChooseOutputFolder={chooseOutputFolder}
-          onAutoGameId={autoGameId}
-        />
+    <QueuePanel
+      {jobs}
+      {progress}
+      {mode}
+      isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+      collapsed={collapsedQueue}
+      onToggle={() => (collapsedQueue = !collapsedQueue)}
+      onRunAll={runAll}
+      onClearQueue={clearQueue}
+      onRemoveJob={removeJob}
+      onRetryJob={retryJob}
+    />
 
-        <CustomizeAssets
-          bind:icon0Path
-          bind:pic0Path
-          bind:pic1Path
-          isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-          onChooseAsset={chooseAsset}
-          onResetAsset={resetAsset}
-          onPreviewAsset={previewAssetImage}
-        />
-      {/if}
-
-      <QueuePanel
-        {jobs}
-        {progress}
-        {mode}
+    {#if mode === 'convert'}
+      <ConvertOptions
+        bind:gameName
+        bind:gameId
+        bind:compression
+        bind:outputTemplate
+        bind:outputFolder
         isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-        onRunAll={runAll}
-        onClearQueue={clearQueue}
-        onRemoveJob={removeJob}
-        onRetryJob={retryJob}
+        collapsed={collapsedOptions}
+        onToggle={() => (collapsedOptions = !collapsedOptions)}
+        onChooseOutputFolder={chooseOutputFolder}
+        onAutoGameId={autoGameId}
       />
 
-      {#if showLog}
-        <LogPanel
-          {logLines}
-          {outputFolder}
-          {backendFile}
-          {backendMessage}
-          isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-          onTestBackend={testBackend}
-        />
-      {/if}
-    </section>
-  </section>
+      <CustomizeAssets
+        bind:icon0Path
+        bind:pic0Path
+        bind:pic1Path
+        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+        collapsed={collapsedAssets}
+        onToggle={() => (collapsedAssets = !collapsedAssets)}
+        onChooseAsset={chooseAsset}
+        onResetAsset={resetAsset}
+        onPreviewAsset={previewAssetImage}
+      />
+    {/if}
+
+    {#if showLog}
+      <LogPanel
+        {logLines}
+        {outputFolder}
+        {backendFile}
+        {backendMessage}
+        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+        onTestBackend={testBackend}
+      />
+    {/if}
+  </div>
 
   <button class="log-toggle" onclick={() => (showLog = !showLog)}>
     {showLog ? 'Hide Logs' : 'Show Logs'}
@@ -440,64 +433,43 @@
 
 <style>
   :root {
-    --bg: rgba(36, 36, 36, 0.86);
-    --bg-secondary: rgba(26, 26, 26, 0.65);
-    --bg-tertiary: #1a1a1a;
-    --bg-hover: #2c2c2c;
-    --text: #f2f2f2;
-    --text-secondary: #a0a0a0;
-    --text-tertiary: #777;
-    --border: #333;
-    --border-subtle: #2c2c2c;
-    --accent: #5b9cf6;
-    --accent-hover: #8bbcff;
-    --accent-bg: rgba(91, 156, 246, 0.08);
-    --accent-bg-hover: rgba(91, 156, 246, 0.15);
-    --overlay: rgba(0, 0, 0, 0.6);
-    --btn-text: #08111f;
-    --body-bg: #1a1a1a;
-    --body-gradient: radial-gradient(circle at top left, rgba(91, 156, 246, 0.14), transparent 26rem);
-    --meta-tag-bg: rgba(26, 26, 26, 0.5);
-    --meta-tag-border: #2c3a55;
-  }
-
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #ffffff;
-      --bg-secondary: #f5f5f5;
-      --bg-tertiary: #e8e8e8;
-      --bg-hover: #e0e0e0;
-      --text: #1a1a1a;
-      --text-secondary: #666;
-      --text-tertiary: #999;
-      --border: #d4d4d4;
-      --border-subtle: #e5e5e5;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --accent-bg: rgba(59, 130, 246, 0.06);
-      --accent-bg-hover: rgba(59, 130, 246, 0.12);
-      --overlay: rgba(0, 0, 0, 0.3);
-      --btn-text: #ffffff;
-      --body-bg: #f5f5f5;
-      --body-gradient: none;
-      --meta-tag-bg: rgba(59, 130, 246, 0.06);
-      --meta-tag-border: #bfdbfe;
-    }
+    --bg: #FFFFFF;
+    --bg-secondary: #F3F6FB;
+    --bg-tertiary: #F8FAFC;
+    --bg-hover: #F3F6FB;
+    --text: #1E2329;
+    --text-secondary: #667085;
+    --text-tertiary: #98A2B3;
+    --border: #D7DCE3;
+    --border-subtle: #E5E8ED;
+    --accent: #2F7DF6;
+    --accent-hover: #1F6FE5;
+    --accent-bg: #EAF2FF;
+    --accent-bg-hover: rgba(47, 125, 246, 0.10);
+    --overlay: rgba(16, 24, 40, 0.5);
+    --btn-text: #FFFFFF;
+    --body-bg: #F5F6F8;
+    --meta-tag-bg: rgba(47, 125, 246, 0.06);
+    --meta-tag-border: #BFDBFE;
+    --danger: #E5484D;
+    --danger-bg: rgba(229, 72, 77, 0.08);
+    --danger-border: rgba(229, 72, 77, 0.35);
   }
 
   :global(body) {
     margin: 0;
-    background: var(--body-gradient), var(--body-bg);
+    background: var(--body-bg);
     color: var(--text);
     font-family:
-      ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Monaco,
-      Consolas,
-      'Liberation Mono',
-      'Courier New',
-      monospace;
+      Inter,
+      -apple-system,
+      BlinkMacSystemFont,
+      "SF Pro Display",
+      "SF Pro Text",
+      "Segoe UI",
+      Roboto,
+      Arial,
+      sans-serif;
   }
 
   :global(button),
@@ -507,8 +479,7 @@
   }
 
   .app {
-    min-height: 100vh;
-    padding: 20px;
+    padding: 28px 24px 72px;
     position: relative;
   }
 
@@ -519,8 +490,8 @@
     display: grid;
     place-items: center;
     z-index: 100;
-    background: var(--accent-bg-hover);
-    border: 3px dashed var(--accent);
+    background: var(--accent-bg);
+    border: 2px dashed var(--accent);
     border-radius: 14px;
     color: var(--accent);
     font-size: 24px;
@@ -529,42 +500,39 @@
     margin: 8px;
   }
 
-  .layout {
-    display: grid;
-    grid-template-columns: 360px 1fr;
-    gap: 16px;
-  }
-
-  .main-panel {
+  .content {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    width: min(100% - 48px, 960px);
+    margin: 0 auto;
   }
 
   .log-toggle {
     position: fixed;
-    bottom: 16px;
-    right: 16px;
+    right: 20px;
+    bottom: 18px;
     z-index: 150;
-    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    height: 32px;
+    padding: 0 14px;
     border-radius: 999px;
-    background: var(--bg);
-    color: var(--text-secondary);
-    padding: 8px 16px;
+    border: 1px solid #D0D5DD;
+    background: #FFFFFF;
+    color: #667085;
     font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.10);
+    transition: border-color 0.15s ease, color 0.15s ease;
   }
 
   .log-toggle:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  @media (max-width: 880px) {
-    .layout {
-      grid-template-columns: 1fr;
-    }
+    border-color: #2F7DF6;
+    color: #2F7DF6;
   }
 </style>
