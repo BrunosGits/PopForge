@@ -269,21 +269,123 @@ fn run_conversion_inner(
     }
 
     if options.mode == "extract" {
-        return ConversionResult {
-            success: false,
-            message: "EBOOT.PBP extraction is not wired yet. Convert mode supports popstation with chdman normalization.".to_string(),
-            output_path: None,
-            command_preview: None,
-        };
-    }
+        let input_title = input_path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Untitled");
+        let output_path = output_folder
+            .join(input_title)
+            .to_string_lossy()
+            .to_string();
 
-    if has_extension(input_path, "chd") {
-        return ConversionResult {
-            success: false,
-            message: "CHD inputs are disabled in this build. Extract the disc image to BIN/CUE first; chdman support will return in a later milestone.".to_string(),
-            output_path: None,
-            command_preview: None,
+        let psxpackager_program = resolve_psxpackager_path(options.popstation_path.as_deref())
+            .to_string_lossy()
+            .to_string();
+
+        let required_tools = vec![ToolRequirement {
+            name: "psxpackager",
+            program: psxpackager_program.clone(),
+        }];
+
+        if let Some(missing_tool) = first_missing_tool(&required_tools) {
+            return ConversionResult {
+                success: false,
+                message: missing_tool,
+                output_path: None,
+                command_preview: None,
+            };
+        }
+
+        let psx_args = vec![
+            "-i".to_string(),
+            file_path.to_string(),
+            "-o".to_string(),
+            output_folder.to_string_lossy().to_string(),
+            "-x".to_string(),
+        ];
+
+        let command_preview = format!(
+            "\"{}\" -i \"{}\" -o \"{}\" -x",
+            psxpackager_program,
+            file_path,
+            output_folder.display()
+        );
+
+        let step = CommandStep {
+            program: psxpackager_program.clone(),
+            args: psx_args,
+            stage: "psxpackager".to_string(),
         };
+
+        emit_progress(
+            app,
+            ConversionProgress {
+                current,
+                total,
+                file_name: file_name.to_string(),
+                stage: "psxpackager".to_string(),
+                file_percent: None,
+            },
+        );
+
+        let output = Command::new(&step.program)
+            .args(&step.args)
+            .output()
+            .map_err(|error| format!("Failed to start {}: {}", step.program, error));
+
+        let result = match output {
+            Ok(output) => {
+                if output.status.success() {
+                    ConversionResult {
+                        success: true,
+                        message: format!("Extracted BIN+CUE to: {}", output_folder.display()),
+                        output_path: Some(output_path),
+                        command_preview: Some(command_preview),
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let details = if stderr.is_empty() {
+                        stdout
+                    } else {
+                        stderr
+                    };
+                    ConversionResult {
+                        success: false,
+                        message: if details.is_empty() {
+                            format!("{} failed with status {}", step.program, output.status)
+                        } else {
+                            format!("{} failed: {}", step.program, details)
+                        },
+                        output_path: Some(output_path),
+                        command_preview: Some(command_preview),
+                    }
+                }
+            }
+            Err(error) => ConversionResult {
+                success: false,
+                message: format!("Failed to start {}: {}", step.program, error),
+                output_path: Some(output_path),
+                command_preview: Some(command_preview),
+            },
+        };
+
+        emit_progress(
+            app,
+            ConversionProgress {
+                current,
+                total,
+                file_name: file_name.to_string(),
+                stage: if result.success {
+                    "completed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                file_percent: Some(if result.success { 1.0 } else { 0.0 }),
+            },
+        );
+
+        return result;
     }
 
     let input_title = input_path
@@ -836,6 +938,11 @@ fn extract_serial_from_filename(filename: &str) -> Option<String> {
     re.find(filename).map(|m| m.as_str().to_string())
 }
 
+#[tauri::command]
+fn extract_serial(filename: String) -> Option<String> {
+    extract_serial_from_filename(&filename)
+}
+
 fn extract_title_from_filename(filename: &str) -> Option<String> {
     let stem = filename.rsplit_once('.').map(|(s, _)| s).unwrap_or(filename);
     let re = regex::Regex::new(r"^([^(\[]+?)(?:\s*[\(\[]|$)").ok()?;
@@ -870,6 +977,43 @@ fn psxdatacenter_url(serial: &str, first_letter: char) -> String {
         "https://psxdatacenter.com/games/{}/{}/{}.html",
         region, letter, serial
     )
+}
+
+fn psxdatacenter_cover_url(serial: &str) -> String {
+    let region = psxdatacenter_region_code(serial);
+    format!(
+        "https://psxdatacenter.com/games/images/cover/{}/{}.jpg",
+        region, serial
+    )
+}
+
+fn fetch_cover(app: &tauri::AppHandle, serial: &str) -> Option<String> {
+    let root = metadata_cache_root(app).ok()?;
+    let cover_path = root.join("covers").join(format!("{}.jpg", serial));
+
+    if cover_path.exists() {
+        return Some(cover_path.to_string_lossy().to_string());
+    }
+
+    let url = psxdatacenter_cover_url(serial);
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(10))
+        .build();
+
+    let request = agent
+        .get(&url)
+        .set("User-Agent", "PopForge/0.1 (+https://github.com/popforge)")
+        .set("Accept", "image/jpeg");
+
+    match request.call() {
+        Ok(resp) => {
+            let mut reader = resp.into_reader();
+            let mut file = fs::File::create(&cover_path).ok()?;
+            std::io::copy(&mut reader, &mut file).ok()?;
+            Some(cover_path.to_string_lossy().to_string())
+        }
+        Err(_) => None,
+    }
 }
 
 fn parse_psxdatacenter_page(html: &str) -> Option<(String, String)> {
@@ -1044,6 +1188,10 @@ fn scrape_metadata_blocking(app: &tauri::AppHandle, file_name: &str) -> GameMeta
     let metadata = fetch_from_psxdatacenter(&serial, title_hint.as_deref())
         .unwrap_or_else(|| stub_metadata(&serial));
 
+    let cover_path = fetch_cover(app, &serial);
+    let mut metadata = metadata;
+    metadata.cover_path = cover_path;
+
     cache.insert(serial, metadata.clone());
     let _ = save_metadata_cache(app, &cache);
     metadata
@@ -1063,8 +1211,78 @@ pub fn run() {
             run_conversion,
             get_settings,
             save_settings,
-            scrape_metadata
+            scrape_metadata,
+            extract_serial
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_serial_from_filename() {
+        assert_eq!(extract_serial_from_filename("Crash Bandicoot [SCUS-94244].iso"), Some("SCUS-94244".to_string()));
+        assert_eq!(extract_serial_from_filename("Tekken 3 (SCES-01234).bin"), Some("SCES-01234".to_string()));
+        assert_eq!(extract_serial_from_filename("no_serial_here.iso"), None);
+    }
+
+    #[test]
+    fn test_extract_title_from_filename() {
+        assert_eq!(extract_title_from_filename("Crash Bandicoot (USA).iso"), Some("Crash Bandicoot".to_string()));
+        assert_eq!(extract_title_from_filename("Tekken 3 [SCES-01234].bin"), Some("Tekken 3".to_string()));
+        assert_eq!(extract_title_from_filename("Simple.iso"), Some("Simple".to_string()));
+    }
+
+    #[test]
+    fn test_region_name_from_serial() {
+        assert_eq!(region_name_from_serial("SCUS-94244"), "USA");
+        assert_eq!(region_name_from_serial("SCES-01234"), "Europe");
+        assert_eq!(region_name_from_serial("SCPS-12345"), "Japan");
+        assert_eq!(region_name_from_serial("SCAS-12345"), "Asia");
+        assert_eq!(region_name_from_serial("SCKS-12345"), "Korea");
+        assert_eq!(region_name_from_serial("XXXX-12345"), "Unknown");
+    }
+
+    #[test]
+    fn test_psxdatacenter_region_code() {
+        assert_eq!(psxdatacenter_region_code("SCUS-94244"), "U");
+        assert_eq!(psxdatacenter_region_code("SCES-01234"), "P");
+        assert_eq!(psxdatacenter_region_code("SCPS-12345"), "J");
+        assert_eq!(psxdatacenter_region_code("SCAS-12345"), "A");
+    }
+
+    #[test]
+    fn test_psxdatacenter_url() {
+        let url = psxdatacenter_url("SCUS-94244", 'C');
+        assert!(url.contains("SCUS-94244"));
+        assert!(url.contains("/U/"));
+        assert!(url.starts_with("https://psxdatacenter.com/games/"));
+    }
+
+    #[test]
+    fn test_psxdatacenter_cover_url() {
+        let url = psxdatacenter_cover_url("SCUS-94244");
+        assert!(url.contains("SCUS-94244"));
+        assert!(url.contains("/U/"));
+        assert!(url.ends_with(".jpg"));
+    }
+
+    #[test]
+    fn test_strip_html() {
+        assert_eq!(strip_html("<b>Hello</b>"), " Hello ");
+        assert_eq!(strip_html("A &amp; B"), "A & B");
+        assert_eq!(strip_html("no tags"), "no tags");
+    }
+
+    #[test]
+    fn test_stub_metadata() {
+        let meta = stub_metadata("SCUS-94244");
+        assert_eq!(meta.serial, "SCUS-94244");
+        assert_eq!(meta.region, "USA");
+        assert_eq!(meta.source, "stub");
+        assert!(!meta.cached);
+    }
 }
