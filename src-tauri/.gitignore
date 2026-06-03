@@ -6,18 +6,7 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 
-# Bundled conversion tools (user-supplied)
-# Keep bin/ tracked via .gitkeep, but never commit the binaries themselves.
-# Match both the bare name and any `<tool>-<target-triple>` suffix produced by
-# Tauri's externalBin resolution.
-/bin/PSXPackager
-/bin/PSXPackager-*
-/bin/PSXPackager.exe
-/bin/PSXPackager-*.exe
-/bin/chdman
-/bin/chdman-*
-/bin/chdman.exe
-/bin/chdman-*.exe
+# Platform-specific dynamic libraries (build artifacts, not committed)
 /bin/*.dylib
 /bin/*.so
 /bin/*.dll
