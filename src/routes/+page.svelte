@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { type UnlistenFn } from '@tauri-apps/api/event';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
   import { invokeCommand, onProgress, isTauriRuntime } from '$lib/tauri';
   import type { Mode, Job, ToolStatus, ConversionProgress, GameMetadata, AppSettings } from '$lib/types';
@@ -10,6 +10,7 @@
   import CustomizeAssets from '$lib/components/CustomizeAssets.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import LogPanel from '$lib/components/LogPanel.svelte';
+  import AboutDialog from '$lib/components/AboutDialog.svelte';
 
   let mode: Mode = $state('convert');
   let outputFolder = $state('');
@@ -39,6 +40,17 @@
 
   let toolchain: ToolStatus[] = $state([]);
   let unlistenProgress: UnlistenFn | null = null;
+  let unlistenDragDrop: UnlistenFn | null = null;
+  let isDragOver = $state(false);
+  let showAbout = $state(false);
+
+  $effect(() => {
+    const _mode = mode;
+    const _compression = compression;
+    if (isTauriRuntime()) {
+      saveSettings();
+    }
+  });
 
   function appendLog(line: string) {
     logLines = [...logLines, line];
@@ -49,15 +61,36 @@
   }
 
   function clearQueue() {
+    if (jobs.length > 0 && !window.confirm('Clear all jobs?')) return;
     jobs = [];
     progress = { current: 0, total: 0, fileName: '', stage: 'idle', filePercent: null };
   }
 
+  function removeJob(id: number) {
+    jobs = jobs.filter((j) => j.id !== id);
+  }
+
+  function retryJob(id: number) {
+    updateJob(id, { status: 'pending', message: null, outputPath: null, commandPreview: null });
+  }
+
   async function loadSettings() {
     const settings = await invokeCommand<AppSettings>('get_settings');
-    if (settings.lastOutputFolder) {
-      outputFolder = settings.lastOutputFolder;
-    }
+    if (settings.lastOutputFolder) outputFolder = settings.lastOutputFolder;
+    if (settings.lastMode === 'convert' || settings.lastMode === 'extract') mode = settings.lastMode;
+    if (settings.compression !== undefined) compression = settings.compression;
+    if (settings.outputTemplate) outputTemplate = settings.outputTemplate;
+  }
+
+  async function saveSettings() {
+    await invokeCommand('save_settings', {
+      settings: {
+        lastOutputFolder: outputFolder,
+        lastMode: mode,
+        compression,
+        outputTemplate
+      } as AppSettings
+    });
   }
 
   async function refreshToolchainStatus() {
@@ -69,22 +102,7 @@
     if (popstation.available && !popstationPath) popstationPath = popstation.path || '';
   }
 
-  async function addJobs() {
-    if (!isTauriRuntime()) {
-      appendLog('[info] File picker is available when the app runs inside Tauri.');
-      return;
-    }
-
-    const filterName = mode === 'extract' ? 'PBP' : 'ISO/BIN/CUE';
-
-    const selected = await open({
-      multiple: true,
-      filters: [{ name: filterName, extensions: mode === 'extract' ? ['pbp'] : ['iso', 'bin', 'cue'] }]
-    });
-
-    if (!selected) return;
-
-    const paths = Array.isArray(selected) ? selected : [selected];
+  async function enqueuePaths(paths: string[], enqueueMode: Mode = mode) {
     if (paths.length === 0) return;
 
     let newJobs: Job[] = [];
@@ -94,7 +112,7 @@
         id: Date.now() + Math.random(),
         filePath,
         fileName,
-        mode,
+        mode: enqueueMode,
         status: 'pending',
         message: null,
         outputPath: null,
@@ -120,13 +138,73 @@
     }
   }
 
+  async function addJobs() {
+    if (!isTauriRuntime()) {
+      appendLog('[info] File picker is available when the app runs inside Tauri.');
+      return;
+    }
+
+    const filterName = mode === 'extract' ? 'PBP' : 'ISO/BIN/CUE';
+
+    const selected = await open({
+      multiple: true,
+      filters: [{ name: filterName, extensions: mode === 'extract' ? ['pbp'] : ['iso', 'bin', 'cue'] }]
+    });
+
+    if (!selected) return;
+
+    const paths = Array.isArray(selected) ? selected : [selected];
+    await enqueuePaths(paths);
+  }
+
+  function handleDragEnter(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = true;
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = true;
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = false;
+  }
+
+  async function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = false;
+    if (!e.dataTransfer?.files.length) return;
+    const paths: string[] = [];
+    for (const file of Array.from(e.dataTransfer.files)) {
+      if ('path' in file) {
+        paths.push((file as File & { path: string }).path);
+      }
+    }
+    if (paths.length > 0) {
+      await enqueuePaths(paths);
+    }
+  }
+
+  async function bindDragDropListener() {
+    if (!isTauriRuntime()) return;
+    try {
+      unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+        if (event.payload.paths.length > 0) {
+          await enqueuePaths(event.payload.paths);
+        }
+      });
+    } catch {
+      // Silently ignore — HTML5 drag-drop fallback handles it
+    }
+  }
+
   async function chooseOutputFolder() {
     const selected = await open({ directory: true });
     if (selected) {
       outputFolder = selected as string;
-      await invokeCommand('save_settings', {
-        settings: { lastOutputFolder: outputFolder } as AppSettings
-      });
+      await saveSettings();
     }
   }
 
@@ -235,12 +313,17 @@
     loadSettings();
     refreshToolchainStatus();
     bindProgressListener();
+    bindDragDropListener();
   });
 
   onDestroy(() => {
     if (unlistenProgress) {
       unlistenProgress();
       unlistenProgress = null;
+    }
+    if (unlistenDragDrop) {
+      unlistenDragDrop();
+      unlistenDragDrop = null;
     }
   });
 
@@ -268,8 +351,19 @@
   <title>PopForge</title>
 </svelte:head>
 
-<main class="app">
-  <TopBar bind:mode isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'} />
+<main
+  class="app"
+  class:drag-over={isDragOver}
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
+>
+  <TopBar bind:mode isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'} onAbout={() => (showAbout = true)} />
+
+  {#if showAbout}
+    <AboutDialog onClose={() => (showAbout = false)} />
+  {/if}
 
   <section class="layout">
     <InputPanel
@@ -312,6 +406,8 @@
         isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
         onRunAll={runAll}
         onClearQueue={clearQueue}
+        onRemoveJob={removeJob}
+        onRetryJob={retryJob}
       />
 
       <LogPanel
@@ -353,6 +449,24 @@
   .app {
     min-height: 100vh;
     padding: 20px;
+    position: relative;
+  }
+
+  .app.drag-over::after {
+    content: 'Drop files here';
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 100;
+    background: rgba(91, 156, 246, 0.15);
+    border: 3px dashed #5b9cf6;
+    border-radius: 14px;
+    color: #5b9cf6;
+    font-size: 24px;
+    font-weight: 700;
+    pointer-events: none;
+    margin: 8px;
   }
 
   .layout {

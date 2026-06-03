@@ -31,6 +31,16 @@ struct ToolStatus {
 struct AppSettings {
     #[serde(default)]
     last_output_folder: String,
+    #[serde(default)]
+    last_mode: String,
+    #[serde(default = "default_compression")]
+    compression: u8,
+    #[serde(default)]
+    output_template: String,
+}
+
+fn default_compression() -> u8 {
+    0
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -829,6 +839,20 @@ fn read_settings(app: &tauri::AppHandle) -> AppSettings {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
+        last_mode: value
+            .get("last_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        compression: value
+            .get("compression")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u8,
+        output_template: value
+            .get("output_template")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
     }
 }
 
@@ -842,6 +866,9 @@ fn write_settings(app: &tauri::AppHandle, settings: &AppSettings) -> Result<(), 
 
     let json = serde_json::json!({
         "last_output_folder": settings.last_output_folder,
+        "last_mode": settings.last_mode,
+        "compression": settings.compression,
+        "output_template": settings.output_template,
     });
     let contents = serde_json::to_string_pretty(&json)
         .map_err(|error| format!("Could not serialize settings: {}", error))?;

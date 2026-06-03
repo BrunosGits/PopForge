@@ -24,7 +24,7 @@
 
     <button class="drop-zone" onclick={onAddJobs} disabled={isRunning}>
       <span class="drop-title">
-        {mode === 'convert' ? 'Drop ISO / BIN+CUE here' : 'Drop EBOOT.PBP here'}
+        {mode === 'convert' ? 'Drop ISO / BIN+CUE here or click to select' : 'Drop EBOOT.PBP here or click to select'}
       </span>
       <span class="drop-subtitle">Click to add files to the queue</span>
     </button>

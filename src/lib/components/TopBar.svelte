@@ -1,13 +1,16 @@
 <script lang="ts">
   import type { Mode } from '$lib/types';
 
-  let { mode = $bindable(), isRunning }: { mode: Mode; isRunning: boolean } = $props();
+  let { mode = $bindable(), isRunning, onAbout }: { mode: Mode; isRunning: boolean; onAbout: () => void } = $props();
 </script>
 
 <header class="topbar">
-  <div>
-    <p class="eyebrow">PSX · PSP · Vita</p>
-    <h1>PopForge</h1>
+  <div class="title-row">
+    <div>
+      <p class="eyebrow">PSX · PSP · Vita</p>
+      <h1>PopForge</h1>
+    </div>
+    <button class="about-btn" onclick={onAbout}>About</button>
   </div>
 
   <div class="mode-toggle">
@@ -36,6 +39,28 @@
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 16px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .about-btn {
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: transparent;
+    color: #a0a0a0;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  .about-btn:hover {
+    border-color: #5b9cf6;
+    color: #5b9cf6;
   }
 
   .eyebrow {

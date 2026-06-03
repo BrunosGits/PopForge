@@ -59,4 +59,7 @@ export type Job = {
 
 export type AppSettings = {
   lastOutputFolder: string;
+  lastMode: string;
+  compression: number;
+  outputTemplate: string;
 };

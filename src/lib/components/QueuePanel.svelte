@@ -8,7 +8,9 @@
     mode,
     isRunning,
     onRunAll,
-    onClearQueue
+    onClearQueue,
+    onRemoveJob,
+    onRetryJob
   }: {
     jobs: Job[];
     progress: ConversionProgress;
@@ -16,6 +18,8 @@
     isRunning: boolean;
     onRunAll: () => void;
     onClearQueue: () => void;
+    onRemoveJob: (id: number) => void;
+    onRetryJob: (id: number) => void;
   } = $props();
 
   function queuePercent(): number {
@@ -68,7 +72,12 @@
 
   {#if jobs.length === 0}
     <div class="empty">
-      No jobs yet. Add files from the input panel.
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="10" width="36" height="28" rx="3" stroke="#555" stroke-width="2" stroke-dasharray="4 2"/>
+        <path d="M24 18v12M18 24h12" stroke="#5b9cf6" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p class="empty-title">No jobs yet</p>
+      <p class="empty-hint">Drop files here or click the input panel to get started.</p>
     </div>
   {:else}
     <div class="jobs">
@@ -109,6 +118,13 @@
               {/if}
               <span>{job.mode}</span>
             </div>
+          </div>
+
+          <div class="job-actions">
+            {#if job.status === 'error'}
+              <button class="retry-btn" onclick={() => onRetryJob(job.id)} disabled={isRunning}>Retry</button>
+            {/if}
+            <button class="remove-btn" onclick={() => onRemoveJob(job.id)} disabled={isRunning}>&times;</button>
           </div>
 
           <span
@@ -157,6 +173,26 @@
     color: #777;
     border: 1px dashed #333;
     border-radius: 10px;
+    gap: 4px;
+  }
+
+  .empty-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+  }
+
+  .empty-title {
+    margin: 0;
+    color: #999;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .empty-hint {
+    margin: 0;
+    color: #666;
+    font-size: 12px;
   }
 
   .jobs {
@@ -235,6 +271,42 @@
 
   .status.running {
     color: #8bbcff;
+  }
+
+  .job-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .remove-btn {
+    border: 1px solid #5a3030;
+    border-radius: 6px;
+    background: rgba(255, 80, 80, 0.1);
+    color: #ff7b7b;
+    padding: 2px 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .remove-btn:hover {
+    background: rgba(255, 80, 80, 0.25);
+    border-color: #ff7b7b;
+  }
+
+  .retry-btn {
+    border: 1px solid #3a5a30;
+    border-radius: 6px;
+    background: rgba(80, 200, 100, 0.1);
+    color: #6ee785;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .retry-btn:hover {
+    background: rgba(80, 200, 100, 0.25);
+    border-color: #6ee785;
   }
 
   .progress {
