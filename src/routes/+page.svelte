@@ -43,6 +43,7 @@
   let unlistenDragDrop: UnlistenFn | null = null;
   let isDragOver = $state(false);
   let showAbout = $state(false);
+  let showLog = $state(false);
 
   $effect(() => {
     const _mode = mode;
@@ -123,6 +124,15 @@
 
     jobs = [...jobs, ...newJobs];
     appendLog(`[info] Added ${newJobs.length} file(s) to the queue.`);
+
+    if (!outputFolder && newJobs.length > 0) {
+      const firstFile = newJobs[0].filePath;
+      const sep = firstFile.includes('\\') ? '\\' : '/';
+      const parts = firstFile.split(sep);
+      parts.pop();
+      outputFolder = parts.join(sep);
+      appendLog(`[info] Output folder auto-set to ${outputFolder}`);
+    }
 
     for (const job of newJobs) {
       try {
@@ -410,25 +420,75 @@
         onRetryJob={retryJob}
       />
 
-      <LogPanel
-        {logLines}
-        {outputFolder}
-        {backendFile}
-        {backendMessage}
-        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-        onTestBackend={testBackend}
-      />
+      {#if showLog}
+        <LogPanel
+          {logLines}
+          {outputFolder}
+          {backendFile}
+          {backendMessage}
+          isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+          onTestBackend={testBackend}
+        />
+      {/if}
     </section>
   </section>
+
+  <button class="log-toggle" onclick={() => (showLog = !showLog)}>
+    {showLog ? 'Hide Logs' : 'Show Logs'}
+  </button>
 </main>
 
 <style>
+  :root {
+    --bg: rgba(36, 36, 36, 0.86);
+    --bg-secondary: rgba(26, 26, 26, 0.65);
+    --bg-tertiary: #1a1a1a;
+    --bg-hover: #2c2c2c;
+    --text: #f2f2f2;
+    --text-secondary: #a0a0a0;
+    --text-tertiary: #777;
+    --border: #333;
+    --border-subtle: #2c2c2c;
+    --accent: #5b9cf6;
+    --accent-hover: #8bbcff;
+    --accent-bg: rgba(91, 156, 246, 0.08);
+    --accent-bg-hover: rgba(91, 156, 246, 0.15);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --btn-text: #08111f;
+    --body-bg: #1a1a1a;
+    --body-gradient: radial-gradient(circle at top left, rgba(91, 156, 246, 0.14), transparent 26rem);
+    --meta-tag-bg: rgba(26, 26, 26, 0.5);
+    --meta-tag-border: #2c3a55;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f5;
+      --bg-tertiary: #e8e8e8;
+      --bg-hover: #e0e0e0;
+      --text: #1a1a1a;
+      --text-secondary: #666;
+      --text-tertiary: #999;
+      --border: #d4d4d4;
+      --border-subtle: #e5e5e5;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-bg: rgba(59, 130, 246, 0.06);
+      --accent-bg-hover: rgba(59, 130, 246, 0.12);
+      --overlay: rgba(0, 0, 0, 0.3);
+      --btn-text: #ffffff;
+      --body-bg: #f5f5f5;
+      --body-gradient: none;
+      --meta-tag-bg: rgba(59, 130, 246, 0.06);
+      --meta-tag-border: #bfdbfe;
+    }
+  }
+
   :global(body) {
     margin: 0;
-    background:
-      radial-gradient(circle at top left, rgba(91, 156, 246, 0.14), transparent 26rem),
-      #1a1a1a;
-    color: #f2f2f2;
+    background: var(--body-gradient), var(--body-bg);
+    color: var(--text);
     font-family:
       ui-monospace,
       SFMono-Regular,
@@ -459,10 +519,10 @@
     display: grid;
     place-items: center;
     z-index: 100;
-    background: rgba(91, 156, 246, 0.15);
-    border: 3px dashed #5b9cf6;
+    background: var(--accent-bg-hover);
+    border: 3px dashed var(--accent);
     border-radius: 14px;
-    color: #5b9cf6;
+    color: var(--accent);
     font-size: 24px;
     font-weight: 700;
     pointer-events: none;
@@ -479,6 +539,27 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .log-toggle {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 150;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+  }
+
+  .log-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   @media (max-width: 880px) {

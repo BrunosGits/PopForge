@@ -30,13 +30,13 @@
     display: grid;
     place-items: center;
     z-index: 200;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay);
   }
 
   .modal {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: #1a1a1a;
+    background: var(--bg);
     padding: 32px;
     max-width: 420px;
     width: 90%;
@@ -46,18 +46,18 @@
   h2 {
     margin: 0 0 4px;
     font-size: 24px;
-    color: #5b9cf6;
+    color: var(--accent);
   }
 
   .version {
     margin: 0 0 16px;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
   .description {
     margin: 0 0 16px;
-    color: #ccc;
+    color: var(--text);
     font-size: 14px;
     line-height: 1.5;
   }
@@ -65,14 +65,14 @@
   .details {
     margin: 0 0 16px;
     padding: 12px;
-    border: 1px solid #2c2c2c;
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    background: rgba(26, 26, 26, 0.65);
+    background: var(--bg-secondary);
   }
 
   .details p {
     margin: 4px 0;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 12px;
   }
 
@@ -81,7 +81,7 @@
   }
 
   .links a {
-    color: #5b9cf6;
+    color: var(--accent);
     text-decoration: none;
     font-size: 13px;
   }
@@ -91,16 +91,16 @@
   }
 
   .close {
-    border: 1px solid #5b9cf6;
+    border: 1px solid var(--accent);
     border-radius: 8px;
-    background: #5b9cf6;
-    color: #08111f;
+    background: var(--accent);
+    color: var(--btn-text);
     padding: 8px 24px;
     font-size: 14px;
     cursor: pointer;
   }
 
   .close:hover {
-    background: #8bbcff;
+    background: var(--accent-hover);
   }
 </style>

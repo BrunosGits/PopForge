@@ -71,9 +71,9 @@
   }
 
   .panel {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: rgba(36, 36, 36, 0.86);
+    background: var(--bg);
     padding: 16px;
   }
 
@@ -85,8 +85,8 @@
   .drop-zone {
     width: 100%;
     min-height: 150px;
-    border: 1px dashed #5b9cf6;
-    background: rgba(91, 156, 246, 0.07);
+    border: 1px dashed var(--accent);
+    background: var(--accent-bg);
     display: grid;
     place-items: center;
     gap: 8px;
@@ -99,7 +99,7 @@
   }
 
   .drop-subtitle {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
@@ -129,9 +129,9 @@
     gap: 10px;
     align-items: center;
     padding: 10px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: rgba(26, 26, 26, 0.65);
+    background: var(--bg-secondary);
   }
 
   .tool-row span {
@@ -139,13 +139,13 @@
   }
 
   .tool-row span span {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 12px;
     margin-top: 3px;
   }
 
   .status {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     text-transform: uppercase;
     font-size: 12px;
   }

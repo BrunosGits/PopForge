@@ -115,9 +115,9 @@
 
 <style>
   .panel {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: rgba(36, 36, 36, 0.86);
+    background: var(--bg);
     padding: 16px;
   }
 
@@ -131,13 +131,13 @@
     gap: 6px;
     margin-bottom: 14px;
     padding: 10px;
-    border: 1px solid #2c2c2c;
+    border: 1px solid var(--border-subtle);
     border-radius: 10px;
-    background: rgba(26, 26, 26, 0.45);
+    background: var(--bg-secondary);
   }
 
   .asset-label {
-    color: #cfe1ff;
+    color: var(--accent);
     font-size: 13px;
     font-weight: 600;
   }
@@ -152,9 +152,9 @@
     gap: 8px;
     margin-top: 6px;
     padding: 10px;
-    border: 1px dashed #5b9cf6;
+    border: 1px dashed var(--accent);
     border-radius: 10px;
-    background: rgba(91, 156, 246, 0.05);
+    background: var(--accent-bg);
   }
 
   .asset-preview img {
@@ -162,7 +162,7 @@
     max-height: 180px;
     object-fit: contain;
     border-radius: 6px;
-    background: #1a1a1a;
+    background: var(--bg-tertiary);
   }
 
   .inline {
@@ -173,35 +173,35 @@
 
   input {
     width: 100%;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #1a1a1a;
-    color: #f2f2f2;
+    background: var(--bg-tertiary);
+    color: var(--text);
     padding: 9px 10px;
   }
 
   input:focus {
     outline: none;
-    border-color: #5b9cf6;
+    border-color: var(--accent);
   }
 
   .muted {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
   button {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #2c2c2c;
-    color: #f2f2f2;
+    background: var(--bg-hover);
+    color: var(--text);
     padding: 8px 12px;
     cursor: pointer;
   }
 
   button:hover {
-    border-color: #5b9cf6;
-    color: #8bbcff;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   button:disabled {

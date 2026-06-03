@@ -48,10 +48,10 @@
   }
 
   .about-btn {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: transparent;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     padding: 4px 10px;
     font-size: 12px;
     cursor: pointer;
@@ -59,13 +59,13 @@
   }
 
   .about-btn:hover {
-    border-color: #5b9cf6;
-    color: #5b9cf6;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .eyebrow {
     margin: 0 0 4px;
-    color: #5b9cf6;
+    color: var(--accent);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     font-size: 12px;
@@ -80,23 +80,23 @@
   .mode-toggle {
     display: flex;
     padding: 4px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 999px;
-    background: #242424;
+    background: var(--bg-tertiary);
   }
 
   button {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #2c2c2c;
-    color: #f2f2f2;
+    background: var(--bg-hover);
+    color: var(--text);
     padding: 8px 12px;
     cursor: pointer;
   }
 
   button:hover {
-    border-color: #5b9cf6;
-    color: #8bbcff;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   button:disabled {
@@ -105,9 +105,9 @@
   }
 
   button.active {
-    border-color: #5b9cf6;
-    background: #5b9cf6;
-    color: #08111f;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--btn-text);
   }
 
   @media (max-width: 880px) {

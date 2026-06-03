@@ -143,9 +143,9 @@
 
 <style>
   .panel {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: rgba(36, 36, 36, 0.86);
+    background: var(--bg);
     padding: 16px;
   }
 
@@ -170,8 +170,8 @@
     display: grid;
     min-height: 230px;
     place-items: center;
-    color: #777;
-    border: 1px dashed #333;
+    color: var(--text-tertiary);
+    border: 1px dashed var(--border);
     border-radius: 10px;
     gap: 4px;
   }
@@ -184,14 +184,14 @@
 
   .empty-title {
     margin: 0;
-    color: #999;
+    color: var(--text-secondary);
     font-size: 15px;
     font-weight: 600;
   }
 
   .empty-hint {
     margin: 0;
-    color: #666;
+    color: var(--text-tertiary);
     font-size: 12px;
   }
 
@@ -206,9 +206,9 @@
     justify-content: space-between;
     gap: 12px;
     padding: 12px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 10px;
-    background: rgba(26, 26, 26, 0.65);
+    background: var(--bg-secondary);
   }
 
   .job-info {
@@ -224,7 +224,7 @@
     height: 72px;
     object-fit: cover;
     border-radius: 6px;
-    background: #1a1a1a;
+    background: var(--bg-tertiary);
     flex-shrink: 0;
   }
 
@@ -232,17 +232,17 @@
     display: inline-block;
     margin-right: 6px;
     padding: 1px 6px;
-    border: 1px solid #2c3a55;
+    border: 1px solid var(--meta-tag-border);
     border-radius: 4px;
-    background: rgba(91, 156, 246, 0.08);
-    color: #cfe1ff;
+    background: var(--meta-tag-bg);
+    color: var(--accent);
     font-size: 11px;
   }
 
   .meta-tag.muted {
-    border-color: #333;
-    background: rgba(26, 26, 26, 0.5);
-    color: #a0a0a0;
+    border-color: var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
   }
 
   .job strong,
@@ -251,12 +251,12 @@
   }
 
   .job span {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 12px;
   }
 
   .status {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     text-transform: uppercase;
     font-size: 12px;
   }
@@ -270,7 +270,7 @@
   }
 
   .status.running {
-    color: #8bbcff;
+    color: var(--accent-hover);
   }
 
   .job-actions {
@@ -313,9 +313,9 @@
     display: grid;
     gap: 6px;
     padding: 12px;
-    border: 1px solid #2c3a55;
+    border: 1px solid var(--meta-tag-border);
     border-radius: 10px;
-    background: rgba(91, 156, 246, 0.08);
+    background: var(--accent-bg);
     margin-bottom: 12px;
   }
 
@@ -324,50 +324,50 @@
     justify-content: space-between;
     align-items: baseline;
     font-size: 13px;
-    color: #cfe1ff;
+    color: var(--accent);
   }
 
   .progress-percent {
-    color: #8bbcff;
+    color: var(--accent-hover);
     font-weight: 700;
   }
 
   .progress-track {
     height: 10px;
     border-radius: 999px;
-    background: rgba(26, 26, 26, 0.85);
+    background: var(--bg-secondary);
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #5b9cf6, #8bbcff);
+    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
     transition: width 0.2s ease;
   }
 
   .progress-file {
     margin: 0;
     font-size: 12px;
-    color: #a0a0a0;
+    color: var(--text-secondary);
   }
 
   .muted {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
   button {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #2c2c2c;
-    color: #f2f2f2;
+    background: var(--bg-hover);
+    color: var(--text);
     padding: 8px 12px;
     cursor: pointer;
   }
 
   button:hover {
-    border-color: #5b9cf6;
-    color: #8bbcff;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   button:disabled {
@@ -376,8 +376,8 @@
   }
 
   button.primary {
-    border-color: #5b9cf6;
-    background: #5b9cf6;
-    color: #08111f;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--btn-text);
   }
 </style>

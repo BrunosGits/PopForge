@@ -63,9 +63,9 @@
 
 <style>
   .panel {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: rgba(36, 36, 36, 0.86);
+    background: var(--bg);
     padding: 16px;
   }
 
@@ -78,24 +78,24 @@
     display: grid;
     gap: 6px;
     margin-bottom: 12px;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
   input,
   select {
     width: 100%;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #1a1a1a;
-    color: #f2f2f2;
+    background: var(--bg-tertiary);
+    color: var(--text);
     padding: 9px 10px;
   }
 
   input:focus,
   select:focus {
     outline: none;
-    border-color: #5b9cf6;
+    border-color: var(--accent);
   }
 
   .inline {
@@ -105,17 +105,17 @@
   }
 
   button {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #2c2c2c;
-    color: #f2f2f2;
+    background: var(--bg-hover);
+    color: var(--text);
     padding: 8px 12px;
     cursor: pointer;
   }
 
   button:hover {
-    border-color: #5b9cf6;
-    color: #8bbcff;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   button:disabled {

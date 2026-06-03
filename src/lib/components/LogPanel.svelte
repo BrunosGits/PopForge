@@ -92,9 +92,9 @@
 
 <style>
   .panel {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 14px;
-    background: rgba(36, 36, 36, 0.86);
+    background: var(--bg);
     padding: 16px;
   }
 
@@ -115,27 +115,27 @@
   .filters {
     display: flex;
     padding: 3px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #1a1a1a;
+    background: var(--bg-tertiary);
   }
 
   .filter-btn {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     padding: 4px 10px;
     font-size: 12px;
     cursor: pointer;
   }
 
   .filter-btn:hover {
-    background: rgba(91, 156, 246, 0.1);
+    background: var(--accent-bg-hover);
   }
 
   .filter-btn.active {
-    background: #2c2c2c;
+    background: var(--bg-hover);
   }
 
   h2 {
@@ -152,24 +152,24 @@
     max-height: 400px;
     margin: 0;
     overflow: auto;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     line-height: 1.6;
     white-space: pre-wrap;
     font-size: 13px;
   }
 
   button {
-    border: 1px solid #333;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #2c2c2c;
-    color: #f2f2f2;
+    background: var(--bg-hover);
+    color: var(--text);
     padding: 8px 12px;
     cursor: pointer;
   }
 
   button:hover {
-    border-color: #5b9cf6;
-    color: #8bbcff;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   button:disabled {
