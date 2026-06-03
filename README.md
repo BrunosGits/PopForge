@@ -41,9 +41,17 @@ Grab the latest `.dmg` from [**GitHub Releases**](https://github.com/BrunosGits/
 
 ## Unsigned Build Notice
 
-PopForge is not code-signed. macOS Gatekeeper will block it when you try to open it.
+PopForge is not code-signed. macOS Gatekeeper will block the app when first opened. You'll see _"PopForge.app is damaged and can't be opened"_ or a generic Gatekeeper dialog.
 
-**Workaround:** Right-click (or Ctrl+click) the app → **Open** → click **Open** in the dialog. This only needs to be done once — subsequent launches work normally.
+**Fix (one-time):**
+
+```bash
+xattr -cr /Applications/PopForge.app
+```
+
+Then open the app normally. The `xattr -cr` command removes the quarantine attribute that Gatekeeper uses to block unsigned apps.
+
+**Alternative:** Right-click (or Ctrl+click) the app in Finder → **Open** → click **Open** in the dialog. This also works if you haven't run the command above.
 
 ## Requirements
 
