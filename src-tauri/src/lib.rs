@@ -699,13 +699,19 @@ fn resolve_resources_dir() -> Option<PathBuf> {
 
     while let Some(d) = dir {
         for candidate in [
-            d.join("Resources"),
+            d.join("Resources").join("bin").join("Resources"),
             d.join("bin").join("Resources"),
+            d.join("Resources"),
+            d.join("../Resources").join("bin").join("Resources"),
             d.join("../Resources"),
+            d.join("../../Resources").join("bin").join("Resources"),
             d.join("../../Resources"),
         ] {
             if candidate.is_dir() {
-                return Some(candidate);
+                let marker = candidate.join("ICON0.PNG");
+                if marker.is_file() {
+                    return Some(candidate);
+                }
             }
         }
         dir = d.parent().map(|p| p.to_path_buf());
