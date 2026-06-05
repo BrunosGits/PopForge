@@ -22,6 +22,7 @@
   let compression = $state(0);
   let outputTemplate = $state('{SERIAL}_{TITLE}');
   let popstationPath = $state('');
+  let subfolderPerGame = $state(false);
   let icon0Path = $state('');
   let pic0Path = $state('');
   let pic1Path = $state('');
@@ -196,6 +197,7 @@
     if (settings.outputTemplate) outputTemplate = settings.outputTemplate;
     if (settings.gameName) gameName = settings.gameName;
     if (settings.gameId) gameId = settings.gameId;
+    if (settings.subfolderPerGame !== undefined) subfolderPerGame = settings.subfolderPerGame;
   }
 
   async function saveSettings() {
@@ -208,7 +210,8 @@
         gameName,
         gameId,
         windowWidth: 800,
-        windowHeight: 600
+        windowHeight: 600,
+        subfolderPerGame
       } as AppSettings
     });
   }
@@ -246,15 +249,6 @@
     collapsedQueue = false;
     appendLog(`[info] Added ${newJobs.length} file(s) to the queue.`);
     showToast('info', `Added ${newJobs.length} file(s)`);
-
-    if (!outputFolder && newJobs.length > 0) {
-      const firstFile = newJobs[0].filePath;
-      const sep = firstFile.includes('\\') ? '\\' : '/';
-      const parts = firstFile.split(sep);
-      parts.pop();
-      outputFolder = parts.join(sep);
-      appendLog(`[info] Output folder auto-set to ${outputFolder}`);
-    }
 
     for (const job of newJobs) {
       try {
@@ -407,31 +401,31 @@
         updateJob(job.id, { status: 'running', message: null, outputPath: null, commandPreview: null });
       }
 
-      try {
-        const options = {
-          mode: primary.mode,
-          gameName: primary.metadata?.title || gameName,
-          gameId: primary.metadata?.serial || gameId,
-          compression,
-          outputTemplate,
-          outputFolder,
-          popstationPath,
-          icon0Path,
-          pic0Path,
-          pic1Path,
-          discPaths: group.map((j) => j.filePath)
-        };
-
-        const result = await invokeCommand<{
-          success: boolean;
-          message: string;
-          output_path: string | null;
-          command_preview: string | null;
-        }>('run_conversion', {
-          filePath: primary.filePath,
-          fileName: primary.fileName,
-          options
-        });
+       try {
+         const options = {
+           mode: primary.mode,
+           gameName: primary.metadata?.title || gameName,
+           gameId: primary.metadata?.serial || gameId,
+           compression,
+           outputTemplate,
+           outputFolder,
+           popstationPath,
+           icon0Path,
+           pic0Path,
+           pic1Path,
+           discPaths: group.map((j) => j.filePath),
+           subfolderPerGame
+         };
+         const result = await invokeCommand<{
+           success: boolean;
+           message: string;
+           output_path: string | null;
+           command_preview: string | null;
+         }>('run_conversion', {
+           filePath: primary.filePath,
+           fileName: primary.fileName,
+           options
+         });
 
         for (const job of group) {
           updateJob(job.id, {
@@ -462,31 +456,31 @@
     async function runSingle(job: (typeof pending)[0]) {
       updateJob(job.id, { status: 'running', message: null, outputPath: null, commandPreview: null });
 
-      try {
-        const options = {
-          mode: job.mode,
-          gameName: job.metadata?.title || gameName,
-          gameId: job.metadata?.serial || gameId,
-          compression,
-          outputTemplate,
-          outputFolder,
-          popstationPath,
-          icon0Path,
-          pic0Path,
-          pic1Path,
-          discPaths: [] as string[]
-        };
-
-        const result = await invokeCommand<{
-          success: boolean;
-          message: string;
-          output_path: string | null;
-          command_preview: string | null;
-        }>('run_conversion', {
-          filePath: job.filePath,
-          fileName: job.fileName,
-          options
-        });
+       try {
+         const options = {
+           mode: job.mode,
+           gameName: job.metadata?.title || gameName,
+           gameId: job.metadata?.serial || gameId,
+           compression,
+           outputTemplate,
+           outputFolder,
+           popstationPath,
+           icon0Path,
+           pic0Path,
+           pic1Path,
+           discPaths: [] as string[],
+           subfolderPerGame
+         };
+         const result = await invokeCommand<{
+           success: boolean;
+           message: string;
+           output_path: string | null;
+           command_preview: string | null;
+         }>('run_conversion', {
+           filePath: job.filePath,
+           fileName: job.fileName,
+           options
+         });
 
         updateJob(job.id, {
           status: result.success ? 'done' : 'error',
@@ -617,6 +611,7 @@
         bind:compression
         bind:outputTemplate
         bind:outputFolder
+        bind:subfolderPerGame
         isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
         collapsed={collapsedOptions}
         onToggle={() => (collapsedOptions = !collapsedOptions)}

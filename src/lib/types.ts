@@ -37,6 +37,7 @@ export type ConversionOptions = {
   pic0Path: string;
   pic1Path: string;
   discPaths: string[];
+  subfolderPerGame: boolean;
 };
 
 export type ToolStatus = {
@@ -69,6 +70,7 @@ export type AppSettings = {
   gameId: string;
   windowWidth: number;
   windowHeight: number;
+  subfolderPerGame: boolean;
 };
 
 export type ToastType = 'success' | 'error' | 'info';

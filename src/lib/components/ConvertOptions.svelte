@@ -5,6 +5,7 @@
     compression = $bindable(),
     outputTemplate = $bindable(),
     outputFolder = $bindable(),
+    subfolderPerGame = $bindable(),
     isRunning,
     collapsed,
     onToggle,
@@ -16,6 +17,7 @@
     compression: number;
     outputTemplate: string;
     outputFolder: string;
+    subfolderPerGame: boolean;
     isRunning: boolean;
     collapsed: boolean;
     onToggle: () => void;
@@ -53,6 +55,21 @@
           <option value={level}>{level}</option>
         {/each}
       </select>
+    </label>
+
+    <label class="toggle-row">
+      <span>Subfolder per game</span>
+      <button
+        type="button"
+        class="toggle"
+        class:active={subfolderPerGame}
+        aria-label={subfolderPerGame ? 'Disable subfolder per game' : 'Enable subfolder per game'}
+        onclick={() => (subfolderPerGame = !subfolderPerGame)}
+        role="switch"
+        aria-checked={subfolderPerGame}
+      >
+        <span class="toggle-knob" class:on={subfolderPerGame}></span>
+      </button>
     </label>
 
     <label>
@@ -191,5 +208,46 @@
   .btn-secondary:disabled {
     cursor: not-allowed;
     opacity: 0.55;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row;
+  }
+
+  .toggle {
+    width: 36px;
+    height: 20px;
+    border: none;
+    border-radius: 999px;
+    background: #D0D5DD;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .toggle.active {
+    background: #2F7DF6;
+  }
+
+  .toggle-knob {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: #FFFFFF;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.15);
+  }
+
+  .toggle-knob.on {
+    transform: translateX(16px);
   }
 </style>

@@ -45,6 +45,8 @@ struct AppSettings {
     window_width: u32,
     #[serde(default = "default_window_height")]
     window_height: u32,
+    #[serde(default)]
+    subfolder_per_game: bool,
 }
 
 impl Default for AppSettings {
@@ -58,6 +60,7 @@ impl Default for AppSettings {
             game_id: String::new(),
             window_width: 800,
             window_height: 600,
+            subfolder_per_game: false,
         }
     }
 }
@@ -95,9 +98,8 @@ struct GameMetadata {
     cached: bool,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
 struct ConversionOptions {
     mode: String,
     game_name: String,
@@ -111,6 +113,8 @@ struct ConversionOptions {
     pic1_path: Option<String>,
     #[serde(default)]
     disc_paths: Vec<String>,
+    #[serde(default)]
+    subfolder_per_game: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -230,14 +234,8 @@ async fn run_conversion(
     result
 }
 
-fn derive_output_name(options: &ConversionOptions, first_path: &Path) -> String {
-    if !options.game_name.is_empty() {
-        return options.game_name.clone();
-    }
-    if !options.game_id.is_empty() {
-        return options.game_id.clone();
-    }
-    let stem = first_path
+fn derive_output_name(path: &Path) -> String {
+    let stem = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("Untitled")
@@ -451,11 +449,22 @@ fn run_conversion_inner(
         return result;
     }
 
-    let output_name = derive_output_name(options, input_path);
-    let output_path = output_folder
-        .join(format!("{}.PBP", output_name))
-        .to_string_lossy()
-        .to_string();
+    let output_name = derive_output_name(input_path);
+    
+    let output_path = if options.subfolder_per_game {
+        // SUBFOLDER BRANCH (Toggle ON) - Create ONE level
+        let subfolder = output_folder.join(&output_name);
+        let _ = fs::create_dir_all(&subfolder);
+        subfolder
+            .join(format!("{}.PBP", output_name))
+            .to_string_lossy()
+            .to_string()
+    } else {
+        output_folder
+            .join(format!("{}.PBP", output_name))
+            .to_string_lossy()
+            .to_string()
+    };
 
     let assets = match stage_psp_assets(
         options.icon0_path.as_deref(),
@@ -478,7 +487,32 @@ fn run_conversion_inner(
     );
 
     let is_multi = all_paths.len() > 1;
-    let pipeline = build_conversion_pipeline(&all_paths, &output_path, options, &assets);
+
+    let input_for_pipeline: PathBuf;
+    if is_multi {
+        let m3u_dir = std::env::temp_dir()
+            .join("popforge")
+            .join("m3u");
+        let _ = fs::create_dir_all(&m3u_dir);
+        let m3u_path = m3u_dir.join(format!("{}.m3u", &output_name));
+        let mut content = String::new();
+        for p in &all_paths {
+            content.push_str(&format!("{}\n", p.display()));
+        }
+        if fs::write(&m3u_path, &content).is_err() {
+            return ConversionResult {
+                success: false,
+                message: "Could not create M3U file for multi-disc conversion.".to_string(),
+                output_path: Some(output_path.clone()),
+                command_preview: None,
+            };
+        }
+        input_for_pipeline = m3u_path;
+    } else {
+        input_for_pipeline = all_paths[0].to_path_buf();
+    }
+
+    let pipeline = build_conversion_pipeline(&input_for_pipeline, &output_path, &output_name, options, &assets);
     let command_preview = pipeline.preview.join("\n");
 
     if let Some(missing_tool) = first_missing_tool(&pipeline.required_tools) {
@@ -556,8 +590,9 @@ struct ToolRequirement {
 }
 
 fn build_conversion_pipeline(
-    input_paths: &[&Path],
+    input_path: &Path,
     output_path: &str,
+    output_name: &str,
     options: &ConversionOptions,
     assets: &StagedAssets,
 ) -> ConversionPipeline {
@@ -574,40 +609,34 @@ fn build_conversion_pipeline(
     let output_dir = Path::new(output_path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
+        .unwrap_or_else(|| Path::new(".").to_string_lossy().to_string());
 
-    let mut psx_args: Vec<String> = Vec::new();
-    for p in input_paths {
-        psx_args.push("-i".to_string());
-        psx_args.push(p.to_string_lossy().to_string());
-    }
-    psx_args.push("-o".to_string());
-    psx_args.push(output_dir.clone());
-    psx_args.push("-l".to_string());
-    psx_args.push(options.compression.to_string());
-    psx_args.push("--import".to_string());
-    psx_args.push("--resource-root".to_string());
-    psx_args.push(assets.temp_dir.to_string_lossy().to_string());
-    psx_args.push("-x".to_string());
+    let output_dir_str = output_dir.clone();
 
-    let preview_line = {
-        let inputs: Vec<String> = input_paths
-            .iter()
-            .map(|p| format!("\"{}\"", p.display()))
-            .collect();
-        format!(
-            "\"{}\" {} -o \"{}\" -l {} --import --resource-root \"{}\" -x",
-            psxpackager_program,
-            inputs
-                .iter()
-                .flat_map(|s| vec!["-i".to_string(), s.clone()])
-                .collect::<Vec<_>>()
-                .join(" "),
-            output_dir,
-            options.compression,
-            assets.temp_dir.display()
-        )
-    };
+    let psx_args = vec![
+        "-i".to_string(),
+        input_path.to_string_lossy().to_string(),
+        "-o".to_string(),
+        output_dir_str,
+        "-f".to_string(),
+        output_name.to_string(),
+        "-l".to_string(),
+        options.compression.to_string(),
+        "--import".to_string(),
+        "--resource-root".to_string(),
+        assets.temp_dir.to_string_lossy().to_string(),
+        "-x".to_string(),
+    ];
+
+    let preview_line = format!(
+        "\"{}\" -i \"{}\" -o \"{}\" -f \"{}\" -l {} --import --resource-root \"{}\" -x",
+        psxpackager_program,
+        input_path.display(),
+        output_dir,
+        output_name,
+        options.compression,
+        assets.temp_dir.display()
+    );
 
     steps.push(CommandStep {
         program: psxpackager_program.clone(),
@@ -981,6 +1010,10 @@ fn read_settings(app: &tauri::AppHandle) -> AppSettings {
             .get("window_height")
             .and_then(|v| v.as_u64())
             .unwrap_or(600) as u32,
+        subfolder_per_game: value
+            .get("subfolder_per_game")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     }
 }
 
@@ -1001,6 +1034,7 @@ fn write_settings(app: &tauri::AppHandle, settings: &AppSettings) -> Result<(), 
         "game_id": settings.game_id,
         "window_width": settings.window_width,
         "window_height": settings.window_height,
+        "subfolder_per_game": settings.subfolder_per_game,
     });
     let contents = serde_json::to_string_pretty(&json)
         .map_err(|error| format!("Could not serialize settings: {}", error))?;
