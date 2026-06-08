@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -93,9 +92,6 @@ struct GameMetadata {
     serial: String,
     title: String,
     region: String,
-    cover_path: Option<String>,
-    source: String,
-    cached: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -147,7 +143,7 @@ fn print_file_path(path: String) -> String {
 
 #[tauri::command]
 fn get_last_file() -> String {
-    LAST_FILE.lock().unwrap().clone()
+    LAST_FILE.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 #[tauri::command]
@@ -243,7 +239,7 @@ fn derive_output_name(path: &Path) -> String {
     let re = regex::Regex::new(
         r"(?i)\s*[\(\[]\s*(disc|cd|disk)\s*\d+\s*[\)\]]|\s*[-–—]\s*(disc|cd|disk)\s*\d+\s*$",
     )
-    .unwrap();
+    .expect("hardcoded regex is valid");
     let cleaned = re.replace(&stem, "").trim().to_string();
     if cleaned.is_empty() {
         stem
@@ -293,16 +289,11 @@ fn run_conversion_inner(
         }
     }
 
-    if options.output_folder.trim().is_empty() {
-        return ConversionResult {
-            success: false,
-            message: "Choose an output folder before running the queue.".to_string(),
-            output_path: None,
-            command_preview: None,
-        };
-    }
-
-    let output_folder = Path::new(&options.output_folder);
+    let output_folder: &Path = if options.output_folder.trim().is_empty() {
+        input_path.parent().unwrap_or_else(|| Path::new("."))
+    } else {
+        Path::new(&options.output_folder)
+    };
 
     if !output_folder.exists() {
         if let Err(error) = fs::create_dir_all(output_folder) {
@@ -466,11 +457,7 @@ fn run_conversion_inner(
             .to_string()
     };
 
-    let assets = match stage_psp_assets(
-        options.icon0_path.as_deref(),
-        options.pic0_path.as_deref(),
-        options.pic1_path.as_deref(),
-    ) {
+    let assets = match stage_psp_assets(None, None, None) {
         Ok(assets) => assets,
         Err(error) => {
             return ConversionResult {
@@ -1058,9 +1045,177 @@ fn extract_serial_from_filename(filename: &str) -> Option<String> {
     re.find(filename).map(|m| m.as_str().to_string())
 }
 
+fn parse_serial_from_iso_name(name: &str) -> Option<String> {
+    // Matches SCUS_942.44 or SLES_000.03 (with optional ;1 version suffix)
+    let name = name.trim_end_matches(";1").trim_end_matches(';');
+    let re = regex::Regex::new(r"([A-Z]{4})[-_](\d{3})\.(\d{2})").ok()?;
+    let caps = re.captures(name)?;
+    Some(format!("{}-{}{}", &caps[1], &caps[2], &caps[3]))
+}
+
+fn detect_sector_format(data: &[u8]) -> Option<(usize, usize)> {
+    // Returns (sector_size, user_data_offset_within_sector)
+    // Try .iso style (2048 byte sectors, user data = whole sector)
+    if data.len() > 16 * 2048 + 6 && &data[16 * 2048 + 1..16 * 2048 + 6] == b"CD001" {
+        return Some((2048, 0));
+    }
+    // Try .bin Mode 2 Form 1 (2352 byte sectors, user data at offset 24)
+    let bin_pvd = 16 * 2352;
+    if data.len() >= bin_pvd + 30 && &data[bin_pvd + 24 + 1..bin_pvd + 24 + 6] == b"CD001" {
+        return Some((2352, 24));
+    }
+    // Try .bin Mode 1 (2352 byte sectors, user data at offset 16)
+    if data.len() >= bin_pvd + 22 && &data[bin_pvd + 16 + 1..bin_pvd + 16 + 6] == b"CD001" {
+        return Some((2352, 16));
+    }
+    None
+}
+
+fn resolve_bin_from_cue(cue_path: &str) -> Option<String> {
+    let content = std::fs::read_to_string(cue_path).ok()?;
+    let parent = std::path::Path::new(cue_path).parent()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.len() < 6 || !line[..4].eq_ignore_ascii_case("file") || !line[4..].starts_with(' ') {
+            continue;
+        }
+        let rest = line[5..].trim();
+        let bin_name = if let Some(q) = rest.strip_prefix('"') {
+            q.split('"').next()?
+        } else {
+            rest.split_whitespace().next()?
+        };
+        if bin_name.is_empty() {
+            continue;
+        }
+        let bin_path = parent.join(bin_name);
+        if bin_path.exists() {
+            return Some(bin_path.to_string_lossy().to_string());
+        }
+    }
+    None
+}
+
+fn extract_serial_from_file(path: &str) -> Option<String> {
+    // If given a .cue file, resolve the referenced .bin instead
+    let path = if path.to_lowercase().ends_with(".cue") {
+        resolve_bin_from_cue(path).unwrap_or(path.to_string())
+    } else {
+        path.to_string()
+    };
+    let data = std::fs::read(&path).ok()?;
+    let (sector_size, user_data_off) = detect_sector_format(&data)?;
+
+    // PVD user data starts at LBA 16
+    let pvd_off = 16 * sector_size + user_data_off;
+
+    // Root directory record is at PVD offset 156
+    // Structure: len(1), xattr_len(1), extent_lba(4), extent_lba_be(4),
+    //            data_len(4), data_len_be(4), datetime(7), flags(1),
+    //            unit_size(1), interleave(1), vol_seq(4), name_len(1)
+    let root_record_start = pvd_off + 156;
+    let root_extent = u32::from_le_bytes([
+        data[root_record_start + 2],
+        data[root_record_start + 3],
+        data[root_record_start + 4],
+        data[root_record_start + 5],
+    ]) as usize;
+    let root_data_len = u32::from_le_bytes([
+        data[root_record_start + 10],
+        data[root_record_start + 11],
+        data[root_record_start + 12],
+        data[root_record_start + 13],
+    ]) as usize;
+
+    let root_off = root_extent * sector_size + user_data_off;
+    let root_end = root_off + root_data_len;
+    if root_end > data.len() {
+        return None;
+    }
+    let root_data = &data[root_off..root_end];
+
+    // Walk directory entries in root directory
+    let mut pos = 0;
+    while pos + 33 < root_data.len() {
+        let record_len = root_data[pos] as usize;
+        if record_len == 0 {
+            break;
+        }
+        let name_len = root_data[pos + 32] as usize;
+        if pos + 33 + name_len > root_data.len() {
+            break;
+        }
+        let name = &data[root_off + pos + 33..root_off + pos + 33 + name_len];
+        if let Ok(name_str) = std::str::from_utf8(name) {
+            // Check if this is an executable file with the serial pattern
+            if let Some(serial) = parse_serial_from_iso_name(name_str) {
+                return Some(serial);
+            }
+            // Check for SYSTEM.CNF
+            if name_str == "SYSTEM.CNF" || name_str == "SYSTEM.CNF;1" {
+                let file_extent = u32::from_le_bytes([
+                    root_data[pos + 2],
+                    root_data[pos + 3],
+                    root_data[pos + 4],
+                    root_data[pos + 5],
+                ]) as usize;
+                let file_data_len = u32::from_le_bytes([
+                    root_data[pos + 10],
+                    root_data[pos + 11],
+                    root_data[pos + 12],
+                    root_data[pos + 13],
+                ]) as usize;
+                let file_off = file_extent * sector_size + user_data_off;
+                if file_off + file_data_len <= data.len() {
+                    let file_data = &data[file_off..file_off + file_data_len];
+                    if let Ok(content) = std::str::from_utf8(file_data) {
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if line.len() > 5
+                                && line[..4].eq_ignore_ascii_case("boot")
+                                && line.as_bytes().get(4) == Some(&b'=')
+                            {
+                                let val = line[5..].trim();
+                                if let Some(serial) = parse_serial_from_iso_name(val) {
+                                    return Some(serial);
+                                }
+                            }
+                        }
+                    }
+                }
+                // Only one SYSTEM.CNF per disc
+                break;
+            }
+        }
+        pos += record_len;
+    }
+
+    // Fallback: try the Volume ID from PVD (some discs store the serial here instead)
+    if let Ok(vol_id) = std::str::from_utf8(&data[pvd_off + 40..pvd_off + 72]) {
+        let vol_id = vol_id.trim_end_matches(' ').trim_end_matches('\0');
+        if !vol_id.is_empty() {
+            if let Some(serial) = parse_serial_from_iso_name(vol_id) {
+                return Some(serial);
+            }
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
-fn extract_serial(filename: String) -> Option<String> {
-    extract_serial_from_filename(&filename)
+fn extract_serial(filename: String, file_path: Option<String>) -> Option<String> {
+    // Try filename regex first (fast)
+    if let Some(serial) = extract_serial_from_filename(&filename) {
+        return Some(serial);
+    }
+    // Fall back to reading from disc image contents
+    if let Some(path) = file_path {
+        if let Some(serial) = extract_serial_from_file(&path) {
+            return Some(serial);
+        }
+    }
+    None
 }
 
 fn extract_title_from_filename(filename: &str) -> Option<String> {
@@ -1099,41 +1254,16 @@ fn psxdatacenter_url(serial: &str, first_letter: char) -> String {
     )
 }
 
-fn psxdatacenter_cover_url(serial: &str) -> String {
-    let region = psxdatacenter_region_code(serial);
-    format!(
-        "https://psxdatacenter.com/games/images/cover/{}/{}.jpg",
-        region, serial
-    )
-}
-
-fn fetch_cover(app: &tauri::AppHandle, serial: &str) -> Option<String> {
-    let root = metadata_cache_root(app).ok()?;
-    let cover_path = root.join("covers").join(format!("{}.jpg", serial));
-
-    if cover_path.exists() {
-        return Some(cover_path.to_string_lossy().to_string());
-    }
-
-    let url = psxdatacenter_cover_url(serial);
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(10))
-        .build();
-
-    let request = agent
-        .get(&url)
-        .set("User-Agent", "PopForge/0.1 (+https://github.com/popforge)")
-        .set("Accept", "image/jpeg");
-
-    match request.call() {
-        Ok(resp) => {
-            let mut reader = resp.into_reader();
-            let mut file = fs::File::create(&cover_path).ok()?;
-            std::io::copy(&mut reader, &mut file).ok()?;
-            Some(cover_path.to_string_lossy().to_string())
-        }
-        Err(_) => None,
-    }
+fn strip_html(html: &str) -> String {
+    let tag_re = regex::Regex::new(r"<[^>]+>").expect("hardcoded regex is valid");
+    let stripped = tag_re.replace_all(html, " ");
+    stripped
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#039;", "'")
 }
 
 fn parse_psxdatacenter_page(html: &str) -> Option<(String, String)> {
@@ -1156,167 +1286,72 @@ fn parse_psxdatacenter_page(html: &str) -> Option<(String, String)> {
     Some((title, region))
 }
 
-fn strip_html(html: &str) -> String {
-    let tag_re = regex::Regex::new(r"<[^>]+>").unwrap();
-    let stripped = tag_re.replace_all(html, " ");
-    stripped
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#039;", "'")
-}
-
 fn fetch_from_psxdatacenter(serial: &str, title_hint: Option<&str>) -> Option<GameMetadata> {
+    let hint_letter = title_hint
+        .and_then(|t| t.chars().next())
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| c.to_ascii_uppercase())
+        .unwrap_or('A');
+
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(10))
         .build();
 
-    let mut letters: Vec<char> = Vec::with_capacity(26);
-    if let Some(t) = title_hint {
-        if let Some(first) = t.chars().next() {
-            let upper = first.to_ascii_uppercase();
-            if upper.is_ascii_alphabetic() {
-                letters.push(upper);
-            }
-        }
-    }
-    for c in 'A'..='Z' {
-        if !letters.contains(&c) {
-            letters.push(c);
-        }
-    }
+    let mut letters: Vec<char> = ('A'..='Z').collect();
+    letters.sort_by_key(|&c| if c == hint_letter { 0 } else { 1 });
 
-    for letter in letters {
+    for &letter in &letters {
         let url = psxdatacenter_url(serial, letter);
         let request = agent
             .get(&url)
             .set("User-Agent", "PopForge/0.1 (+https://github.com/popforge)")
             .set("Accept", "text/html");
-        match request.call() {
-            Ok(resp) => {
-                if let Ok(html) = resp.into_string() {
-                    if let Some((title, region)) = parse_psxdatacenter_page(&html) {
-                        return Some(GameMetadata {
-                            serial: serial.to_string(),
-                            title,
-                            region: if region.is_empty() {
-                                region_name_from_serial(serial).to_string()
-                            } else {
-                                region
-                            },
-                            cover_path: None,
-                            source: "psxdatacenter".to_string(),
-                            cached: false,
-                        });
-                    }
+
+        if let Ok(resp) = request.call() {
+            if let Ok(html) = resp.into_string() {
+                if let Some((title, region)) = parse_psxdatacenter_page(&html) {
+                    return Some(GameMetadata {
+                        serial: serial.to_string(),
+                        title,
+                        region: if region.is_empty() {
+                            region_name_from_serial(serial).to_string()
+                        } else {
+                            region
+                        },
+                    });
                 }
             }
-            Err(_) => continue,
         }
     }
 
     None
 }
 
-fn stub_metadata(serial: &str) -> GameMetadata {
-    GameMetadata {
-        serial: serial.to_string(),
-        title: format!("Game {}", serial),
-        region: region_name_from_serial(serial).to_string(),
-        cover_path: None,
-        source: "stub".to_string(),
-        cached: false,
-    }
-}
-
-fn metadata_cache_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let base = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("Could not resolve cache dir: {}", error))?;
-    let cache = base.join("cache");
-    fs::create_dir_all(cache.join("covers"))
-        .map_err(|error| format!("Could not create cache covers: {}", error))?;
-    Ok(cache)
-}
-
-fn load_metadata_cache(app: &tauri::AppHandle) -> HashMap<String, GameMetadata> {
-    let Ok(root) = metadata_cache_root(app) else {
-        return HashMap::new();
-    };
-    let path = root.join("metadata.json");
-    let Ok(contents) = fs::read_to_string(&path) else {
-        return HashMap::new();
-    };
-    serde_json::from_str(&contents).unwrap_or_default()
-}
-
-fn save_metadata_cache(
-    app: &tauri::AppHandle,
-    cache: &HashMap<String, GameMetadata>,
-) -> Result<(), String> {
-    let root = metadata_cache_root(app)?;
-    let path = root.join("metadata.json");
-    let contents = serde_json::to_string_pretty(cache)
-        .map_err(|error| format!("Could not serialize metadata: {}", error))?;
-    fs::write(&path, contents)
-        .map_err(|error| format!("Could not write {}: {}", path.display(), error))
-}
-
 #[tauri::command]
-async fn scrape_metadata(app: tauri::AppHandle, file_name: String) -> GameMetadata {
-    let app_for_task = app.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        scrape_metadata_blocking(&app_for_task, &file_name)
-    })
-    .await;
-    result.unwrap_or_else(|error| GameMetadata {
-        serial: String::new(),
-        title: format!("Scrape task panicked: {}", error),
-        region: "Unknown".to_string(),
-        cover_path: None,
-        source: "error".to_string(),
-        cached: false,
-    })
-}
+fn scrape_metadata(file_name: String, file_path: Option<String>) -> GameMetadata {
+    let title_hint = extract_title_from_filename(&file_name);
+    let serial = extract_serial_from_filename(&file_name)
+        .or_else(|| file_path.as_deref().and_then(extract_serial_from_file));
 
-fn scrape_metadata_blocking(app: &tauri::AppHandle, file_name: &str) -> GameMetadata {
-    let serial = match extract_serial_from_filename(file_name) {
-        Some(serial) => serial,
-        None => {
-            let title = extract_title_from_filename(file_name)
-                .unwrap_or_else(|| "Unknown title".to_string());
-            return GameMetadata {
-                serial: String::new(),
-                title,
-                region: "Unknown".to_string(),
-                cover_path: None,
-                source: "no-serial".to_string(),
-                cached: false,
-            };
+    match serial {
+        Some(serial) => {
+            fetch_from_psxdatacenter(&serial, title_hint.as_deref())
+                .unwrap_or_else(|| {
+                    let title = title_hint
+                        .unwrap_or_else(|| format!("Game {}", serial));
+                    GameMetadata {
+                        serial: serial.to_string(),
+                        title,
+                        region: region_name_from_serial(&serial).to_string(),
+                    }
+                })
         }
-    };
-
-    let mut cache = load_metadata_cache(app);
-    if let Some(meta) = cache.get(&serial) {
-        let mut m = meta.clone();
-        m.cached = true;
-        return m;
+        None => GameMetadata {
+            serial: String::new(),
+            title: title_hint.unwrap_or_else(|| "Unknown title".to_string()),
+            region: "Unknown".to_string(),
+        },
     }
-
-    let title_hint = extract_title_from_filename(file_name);
-    let metadata = fetch_from_psxdatacenter(&serial, title_hint.as_deref())
-        .unwrap_or_else(|| stub_metadata(&serial));
-
-    let cover_path = fetch_cover(app, &serial);
-    let mut metadata = metadata;
-    metadata.cover_path = cover_path;
-
-    cache.insert(serial, metadata.clone());
-    let _ = save_metadata_cache(app, &cache);
-    metadata
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1405,26 +1440,9 @@ mod tests {
     }
 
     #[test]
-    fn test_psxdatacenter_cover_url() {
-        let url = psxdatacenter_cover_url("SCUS-94244");
-        assert!(url.contains("SCUS-94244"));
-        assert!(url.contains("/U/"));
-        assert!(url.ends_with(".jpg"));
-    }
-
-    #[test]
     fn test_strip_html() {
         assert_eq!(strip_html("<b>Hello</b>"), " Hello ");
         assert_eq!(strip_html("A &amp; B"), "A & B");
         assert_eq!(strip_html("no tags"), "no tags");
-    }
-
-    #[test]
-    fn test_stub_metadata() {
-        let meta = stub_metadata("SCUS-94244");
-        assert_eq!(meta.serial, "SCUS-94244");
-        assert_eq!(meta.region, "USA");
-        assert_eq!(meta.source, "stub");
-        assert!(!meta.cached);
     }
 }

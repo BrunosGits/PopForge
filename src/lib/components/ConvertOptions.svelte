@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { slide } from 'svelte/transition';
+
   let {
+    mode = $bindable(),
     gameName = $bindable(),
     gameId = $bindable(),
     compression = $bindable(),
@@ -10,8 +13,10 @@
     collapsed,
     onToggle,
     onChooseOutputFolder,
-    onAutoGameId
+    onGrabFromFile,
+    onFetchMetadata,
   }: {
+    mode: string;
     gameName: string;
     gameId: string;
     compression: number;
@@ -22,7 +27,8 @@
     collapsed: boolean;
     onToggle: () => void;
     onChooseOutputFolder: () => void;
-    onAutoGameId: () => void;
+    onGrabFromFile: () => void;
+    onFetchMetadata: () => void;
   } = $props();
 </script>
 
@@ -35,27 +41,36 @@
   </button>
 
   {#if !collapsed}
-    <label>
-      Game Name
-      <input bind:value={gameName} placeholder="Tony Hawk's Pro Skater" />
-    </label>
+    {#if mode === 'convert'}
+      <div transition:slide>
+        <label>
+          Game ID
+          <div class="inline">
+            <input bind:value={gameId} />
+            <button type="button" class="btn-secondary" onclick={onGrabFromFile}>Grab from File</button>
+            <span class="help-icon" data-tooltip="Extracts the serial number from the filename or disc image content. e.g. SCUS-94244">?</span>
+          </div>
+        </label>
 
-    <label>
-      Game ID
-      <div class="inline">
-        <input bind:value={gameId} />
-        <button type="button" class="btn-secondary" onclick={onAutoGameId}>Auto</button>
+        <label>
+          Game Name
+          <div class="inline">
+            <input bind:value={gameName} placeholder="Tony Hawk's Pro Skater" />
+            <button type="button" class="btn-secondary" onclick={onFetchMetadata}>Fetch Metadata</button>
+            <span class="help-icon" data-tooltip="Looks up the game title from psxdatacenter.com using the file serial number. e.g. SCUS-94244">?</span>
+          </div>
+        </label>
+
+        <label>
+          Compression
+          <select bind:value={compression}>
+            {#each Array.from({ length: 10 }, (_, i) => i) as level}
+              <option value={level}>{level}</option>
+            {/each}
+          </select>
+        </label>
       </div>
-    </label>
-
-    <label>
-      Compression
-      <select bind:value={compression}>
-        {#each Array.from({ length: 10 }, (_, i) => i) as level}
-          <option value={level}>{level}</option>
-        {/each}
-      </select>
-    </label>
+    {/if}
 
     <label class="toggle-row">
       <span>Subfolder per game</span>
@@ -72,10 +87,14 @@
       </button>
     </label>
 
-    <label>
-      Output Filename Template
-      <input bind:value={outputTemplate} class="mono" />
-    </label>
+    {#if mode === 'convert'}
+      <div transition:slide>
+        <label>
+          Output Filename Template
+          <input bind:value={outputTemplate} class="mono" />
+        </label>
+      </div>
+    {/if}
 
     <label>
       Output Folder
@@ -86,6 +105,7 @@
         </button>
       </div>
     </label>
+
   {/if}
 </section>
 
@@ -177,7 +197,7 @@
 
   .inline {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     gap: 8px;
   }
 
@@ -250,4 +270,43 @@
   .toggle-knob.on {
     transform: translateX(16px);
   }
+
+  .help-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid var(--text-tertiary);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: help;
+    flex-shrink: 0;
+  }
+
+  .help-icon::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    background: #1E2329;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 6px 10px;
+    border-radius: 6px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+  }
+
+  .help-icon:hover::after {
+    opacity: 1;
+  }
+
 </style>

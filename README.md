@@ -8,7 +8,7 @@ Convert PlayStation 1 disc images to PSP EBOOT.PBP — and back.
 
 ## About
 
-PopForge is a native macOS desktop app for converting PS1 disc images (ISO, BIN/CUE) to the PSP EBOOT.PBP format and extracting them back. It wraps [PSXPackager](https://github.com/RupertAvery/PSXPackager) in a modern GUI with queue management, drag-and-drop, and asset customization.
+PopForge is a native macOS desktop app for converting PS1 disc images (ISO, BIN/CUE) to the PSP EBOOT.PBP format and extracting them back. It wraps [PSXPackager](https://github.com/RupertAvery/PSXPackager) in a modern GUI with queue management, drag-and-drop, and metadata lookup.
 
 PBP (EBOOT.PBP) is the format used by PS1 Classics on the PSP and PS3 PlayStation emulators. It is also supported by emulators such as ePSXe, PCSX, Beetle PSX (Mednafen/RetroArch) and DuckStation.
 
@@ -25,9 +25,8 @@ Grab the latest `.dmg` from [**GitHub Releases**](https://github.com/BrunosGits/
 - **Queue** — add multiple files, run all, retry failed jobs, remove individual jobs
 - **Drag & drop** — drop files anywhere on the window
 - **Compression** — levels 0 (fast) to 9 (smallest)
-- **Custom PSP assets** — set ICON0, PIC0, PIC1 via file picker or use defaults
-- **Cover art** — auto-fetches game covers from psxdatacenter
-- **Auto Game ID** — serial number extracted from filenames
+- **Auto Game ID** — serial number extracted from filenames and CUE/BIN content
+- **Auto Game Name** — title fetched from [psxdatacenter.com](https://psxdatacenter.com) based on serial
 - **Settings persistence** — remembers your preferences across sessions
 
 ## Usage
@@ -35,7 +34,7 @@ Grab the latest `.dmg` from [**GitHub Releases**](https://github.com/BrunosGits/
 1. **Add files** — use the file picker or drag & drop ISO, BIN+CUE, or PBP files
 2. **Set output folder** — choose where converted files go
 3. **Pick a mode** — Convert (→ PBP) or Extract (→ BIN+CUE)
-4. **Adjust settings** — compression level, game name, custom assets
+4. **Adjust settings** — compression level, game name, game ID
 5. **Run All** — process the queue
 6. **Done** — find your output files in the chosen folder
 
@@ -92,7 +91,7 @@ npm run tauri build    # production DMG
 
 Conversion powered by [**PSXPackager**](https://github.com/RupertAvery/PSXPackager) by RupertAvery.
 
-Game cover data from [psxdatacenter.com](http://psxdatacenter.com).
+Game metadata (title, serial, region) from [psxdatacenter.com](http://psxdatacenter.com).
 
 ## License
 

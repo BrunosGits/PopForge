@@ -43,8 +43,8 @@ describe('invokeCommand', () => {
   });
 
   it('returns stub for scrape_metadata when not in Tauri', async () => {
-    const result = await invokeCommand<{ source: string }>('scrape_metadata');
-    expect(result.source).toBe('browser-preview');
+    const result = await invokeCommand<{ title: string }>('scrape_metadata');
+    expect(result.title).toContain('Browser preview');
   });
 
   it('returns stub for get_toolchain_status when not in Tauri', async () => {

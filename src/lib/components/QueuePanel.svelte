@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { convertFileSrc } from '@tauri-apps/api/core';
   import type { Job, ConversionProgress, Mode } from '$lib/types';
 
   let {
@@ -16,7 +15,7 @@
     onRetryJob,
     onToggleSelection,
     onMergeSelected,
-    onUngroupJob
+    onUngroupJob,
   }: {
     jobs: Job[];
     progress: ConversionProgress;
@@ -154,13 +153,6 @@
             </button>
 
             <div class="job-info">
-              {#if job.metadata?.coverPath}
-                <img
-                  class="job-cover"
-                  src={convertFileSrc(job.metadata.coverPath)}
-                  alt="{job.metadata.title} cover"
-                />
-              {/if}
               <div>
                 <strong>
                   {job.metadata?.title ?? job.fileName}
@@ -173,11 +165,6 @@
                   <span>
                     <span class="meta-tag">{job.metadata.serial}</span>
                     <span class="meta-tag">{job.metadata.region}</span>
-                    {#if job.metadata.cached}
-                      <span class="meta-tag muted">cached</span>
-                    {:else if job.metadata.source && job.metadata.source !== 'stub' && job.metadata.source !== 'no-serial'}
-                      <span class="meta-tag muted">{job.metadata.source}</span>
-                    {/if}
                   </span>
                 {/if}
                 {#if job.message}
@@ -444,23 +431,6 @@
     opacity: 0.4;
   }
 
-  .job-info {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .job-cover {
-    width: 56px;
-    height: 56px;
-    object-fit: cover;
-    border-radius: 6px;
-    background: var(--bg-tertiary);
-    flex-shrink: 0;
-  }
-
   .job-info strong {
     display: block;
     font-size: 14px;
@@ -504,12 +474,6 @@
     background: var(--meta-tag-bg);
     color: #2F7DF6;
     font-size: 11px;
-  }
-
-  .meta-tag.muted {
-    border-color: var(--border);
-    background: transparent;
-    color: #98A2B3;
   }
 
   .status-badge {

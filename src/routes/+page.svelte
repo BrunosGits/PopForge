@@ -7,7 +7,6 @@
   import TopBar from '$lib/components/TopBar.svelte';
   import InputPanel from '$lib/components/InputPanel.svelte';
   import ConvertOptions from '$lib/components/ConvertOptions.svelte';
-  import CustomizeAssets from '$lib/components/CustomizeAssets.svelte';
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import LogPanel from '$lib/components/LogPanel.svelte';
   import AboutDialog from '$lib/components/AboutDialog.svelte';
@@ -23,9 +22,6 @@
   let outputTemplate = $state('{SERIAL}_{TITLE}');
   let popstationPath = $state('');
   let subfolderPerGame = $state(false);
-  let icon0Path = $state('');
-  let pic0Path = $state('');
-  let pic1Path = $state('');
   let logLines: string[] = $state([
     '[info] Select files, then run the queue.'
   ]);
@@ -48,7 +44,6 @@
 
   let collapsedQueue = $state(true);
   let collapsedOptions = $state(true);
-  let collapsedAssets = $state(true);
 
   let toasts: ToastNotification[] = $state([]);
   let selectedJobIds: Set<number> = $state(new Set());
@@ -245,23 +240,15 @@
       });
     }
 
+    if (!outputFolder && paths[0]) {
+      const parent = paths[0].split(/[\\/]/).slice(0, -1).join('/');
+      if (parent) outputFolder = parent;
+    }
+
     jobs = [...jobs, ...newJobs];
     collapsedQueue = false;
     appendLog(`[info] Added ${newJobs.length} file(s) to the queue.`);
     showToast('info', `Added ${newJobs.length} file(s)`);
-
-    for (const job of newJobs) {
-      try {
-        const metadata = await invokeCommand<GameMetadata>('scrape_metadata', {
-          filePath: job.filePath,
-          fileName: job.fileName
-        });
-        updateJob(job.id, { metadata });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        appendLog(`[warn] Metadata lookup failed for ${job.fileName}: ${msg}`);
-      }
-    }
 
     autoDetectGroups();
   }
@@ -336,37 +323,41 @@
     }
   }
 
-  async function chooseAsset(name: string) {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'PNG', extensions: ['png'] }]
-    });
-    if (!selected) return;
-    const path = selected as string;
-    if (name === 'icon0') icon0Path = path;
-    else if (name === 'pic0') pic0Path = path;
-    else pic1Path = path;
-    appendLog(`[info] ${name.toUpperCase()} set to ${path}`);
-  }
-
-  function resetAsset(name: string) {
-    if (name === 'icon0') icon0Path = '';
-    else if (name === 'pic0') pic0Path = '';
-    else pic1Path = '';
-    appendLog(`[info] ${name.toUpperCase()} reset to bundled default.`);
-  }
-
-  function previewAssetImage(name: string) {
-    appendLog(`[info] ${name.toUpperCase()} preview is shown inline below the asset row.`);
+  async function downloadGameInfo() {
+    const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
+    const fileName = lastJob?.fileName || backendFile;
+    const filePath = lastJob?.filePath || '';
+    if (!fileName) {
+      appendLog('[info] Add a file to the queue first to fetch metadata.');
+      return;
+    }
+    try {
+      const metadata = await invokeCommand<GameMetadata>('scrape_metadata', {
+        filePath: filePath || null,
+        fileName
+      });
+      if (metadata.title && metadata.title !== 'Unknown title') {
+        gameName = metadata.title;
+      }
+      if (metadata.serial) {
+        gameId = metadata.serial;
+      }
+      appendLog(`[info] Metadata fetched: ${metadata.title} (${metadata.serial})`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog(`[warn] Metadata fetch failed: ${msg}`);
+    }
   }
 
   async function autoGameId() {
-    const fileName = jobs.length > 0 ? jobs[jobs.length - 1].fileName : backendFile;
+    const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
+    const fileName = lastJob?.fileName || backendFile;
+    const filePath = lastJob?.filePath || '';
     if (!fileName) {
       appendLog('[info] Add a file to the queue first, or select a file to extract the Game ID.');
       return;
     }
-    const serial = await invokeCommand<string | null>('extract_serial', { filename: fileName });
+    const serial = await invokeCommand<string | null>('extract_serial', { filename: fileName, filePath: filePath || null });
     if (serial) {
       gameId = serial;
       appendLog(`[info] Game ID set to ${serial} from ${fileName}`);
@@ -381,7 +372,7 @@
     let succeeded = 0;
     let failed = 0;
 
-    const pending = jobs.filter((j) => j.status === 'pending');
+    const pending = jobs.filter((j) => j.status === 'pending' && j.mode === mode);
     const groups = new Map<number, typeof pending>();
     const singles: typeof pending = [];
 
@@ -409,11 +400,11 @@
            compression,
            outputTemplate,
            outputFolder,
-           popstationPath,
-           icon0Path,
-           pic0Path,
-           pic1Path,
-           discPaths: group.map((j) => j.filePath),
+            popstationPath,
+            icon0Path: '',
+            pic0Path: '',
+            pic1Path: '',
+            discPaths: group.map((j) => j.filePath),
            subfolderPerGame
          };
          const result = await invokeCommand<{
@@ -464,11 +455,11 @@
            compression,
            outputTemplate,
            outputFolder,
-           popstationPath,
-           icon0Path,
-           pic0Path,
-           pic1Path,
-           discPaths: [] as string[],
+            popstationPath,
+            icon0Path: '',
+            pic0Path: '',
+            pic1Path: '',
+            discPaths: [] as string[],
            subfolderPerGame
          };
          const result = await invokeCommand<{
@@ -588,7 +579,7 @@
     />
 
     <QueuePanel
-      {jobs}
+      jobs={jobs.filter(j => j.mode === mode)}
       {progress}
       {mode}
       {selectedJobIds}
@@ -604,8 +595,8 @@
       onUngroupJob={ungroupJob}
     />
 
-    {#if mode === 'convert'}
       <ConvertOptions
+        bind:mode
         bind:gameName
         bind:gameId
         bind:compression
@@ -616,21 +607,9 @@
         collapsed={collapsedOptions}
         onToggle={() => (collapsedOptions = !collapsedOptions)}
         onChooseOutputFolder={chooseOutputFolder}
-        onAutoGameId={autoGameId}
+        onGrabFromFile={autoGameId}
+        onFetchMetadata={downloadGameInfo}
       />
-
-      <CustomizeAssets
-        bind:icon0Path
-        bind:pic0Path
-        bind:pic1Path
-        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-        collapsed={collapsedAssets}
-        onToggle={() => (collapsedAssets = !collapsedAssets)}
-        onChooseAsset={chooseAsset}
-        onResetAsset={resetAsset}
-        onPreviewAsset={previewAssetImage}
-      />
-    {/if}
 
     {#if showLog}
       <LogPanel
@@ -649,6 +628,7 @@
   <button class="log-toggle" onclick={() => (showLog = !showLog)}>
     {showLog ? 'Hide Logs' : 'Show Logs'}
   </button>
+
 </main>
 
 <style>
@@ -755,4 +735,6 @@
     border-color: #2F7DF6;
     color: #2F7DF6;
   }
+
+
 </style>

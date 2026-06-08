@@ -42,9 +42,6 @@ export function invokeCommand<T>(command: string, args?: Record<string, unknown>
         serial: '',
         title: 'Browser preview: scraping runs inside Tauri.',
         region: 'Unknown',
-        coverPath: null,
-        source: 'browser-preview',
-        cached: false
       } as T);
     }
   }

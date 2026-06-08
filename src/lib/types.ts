@@ -20,9 +20,6 @@ export type GameMetadata = {
   serial: string;
   title: string;
   region: string;
-  coverPath: string | null;
-  source: string;
-  cached: boolean;
 };
 
 export type ConversionOptions = {
