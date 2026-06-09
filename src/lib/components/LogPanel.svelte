@@ -55,10 +55,10 @@
   }
 
   function levelColor(level: LogLevel | 'all'): string {
-    if (level === 'all') return '#667085';
-    if (level === 'info') return '#2F7DF6';
-    if (level === 'warn') return '#DC6803';
-    return '#E5484D';
+    if (level === 'all') return 'var(--text-secondary)';
+    if (level === 'info') return 'var(--accent)';
+    if (level === 'warn') return 'var(--warn-text)';
+    return 'var(--danger)';
   }
 </script>
 
@@ -118,14 +118,14 @@
     padding: 3px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
   }
 
   .filter-btn {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: #667085;
+    color: var(--text-secondary);
     padding: 4px 10px;
     font-size: 12px;
     font-weight: 500;
@@ -133,11 +133,11 @@
   }
 
   .filter-btn:hover {
-    background: #F3F6FB;
+    background: var(--bg-hover);
   }
 
   .filter-btn.active {
-    background: #FFFFFF;
+    background: var(--bg);
     box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   }
 
@@ -145,7 +145,7 @@
     margin: 0;
     font-size: 15px;
     font-weight: 700;
-    color: #1E2329;
+    color: var(--text);
   }
 
   .log-panel {
@@ -157,7 +157,7 @@
     max-height: 400px;
     margin: 0;
     overflow: auto;
-    color: #667085;
+    color: var(--text-secondary);
     line-height: 1.6;
     white-space: pre-wrap;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -174,18 +174,18 @@
     font-size: 13px;
     font-weight: 500;
     letter-spacing: 0.01em;
-    border: 1px solid #D0D5DD;
+    border: 1px solid var(--btn-border);
     border-radius: 8px;
-    background: #FFFFFF;
-    color: #344054;
+    background: var(--bg);
+    color: var(--btn-text-color);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
 
   .btn-secondary:hover {
-    background: #F5F6F8;
-    border-color: #C1C7CF;
+    background: var(--body-bg);
+    border-color: var(--btn-hover-border);
   }
 
   .btn-secondary:disabled {

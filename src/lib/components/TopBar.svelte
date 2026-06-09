@@ -56,23 +56,23 @@
     font-size: 13px;
     font-weight: 500;
     letter-spacing: 0.01em;
-    border: 1px solid #D0D5DD;
+    border: 1px solid var(--btn-border);
     border-radius: 8px;
-    background: #FFFFFF;
-    color: #344054;
+    background: var(--bg);
+    color: var(--btn-text-color);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
 
   .btn-secondary:hover {
-    background: #F5F6F8;
-    border-color: #C1C7CF;
+    background: var(--body-bg);
+    border-color: var(--btn-hover-border);
   }
 
   .eyebrow {
     margin: 0 0 4px;
-    color: #2F7DF6;
+    color: var(--accent);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     font-size: 13px;
@@ -83,13 +83,13 @@
     margin: 0;
     font-size: 34px;
     font-weight: 700;
-    color: #1E2329;
+    color: var(--text);
   }
 
   .mode-toggle {
     display: inline-flex;
     align-items: center;
-    background: #E4E7ED;
+    background: var(--toggle-bg);
     border-radius: 999px;
     padding: 3px;
     gap: 2px;
@@ -112,17 +112,17 @@
     white-space: nowrap;
     transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     background: transparent;
-    color: #667085;
+    color: var(--text-secondary);
   }
 
   .mode-toggle button.active {
-    background: #2F7DF6;
-    color: #FFFFFF;
+    background: var(--accent);
+    color: var(--btn-text);
     box-shadow: 0 1px 3px rgba(47, 125, 246, 0.30), 0 1px 1px rgba(0, 0, 0, 0.06);
   }
 
   .mode-toggle button:not(.active):hover {
-    color: #1E2329;
+    color: var(--text);
   }
 
   .mode-toggle button:disabled {

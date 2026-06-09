@@ -5,7 +5,7 @@
 <div class="overlay" role="dialog" aria-modal="true">
   <div class="modal">
     <h2>PopForge</h2>
-    <p class="version">v0.4.0-alpha</p>
+    <p class="version">v0.5.0-alpha</p>
     <p class="description">
       PS1 ↔ PSP disc image conversion tool.<br />
       Converts PS1 ISO, BIN+CUE to PSP EBOOT.PBP and back.
@@ -34,9 +34,9 @@
   }
 
   .modal {
-    border: 1px solid #E3E8EF;
+    border: 1px solid var(--modal-border);
     border-radius: 14px;
-    background: #FFFFFF;
+    background: var(--bg);
     padding: 32px;
     max-width: 420px;
     width: 90%;
@@ -47,19 +47,19 @@
   h2 {
     margin: 0 0 4px;
     font-size: 24px;
-    color: #2F7DF6;
+    color: var(--accent);
   }
 
   .version {
     margin: 0 0 16px;
-    color: #667085;
+    color: var(--text-secondary);
     font-size: 13px;
     font-weight: 500;
   }
 
   .description {
     margin: 0 0 16px;
-    color: #1E2329;
+    color: var(--text);
     font-size: 14px;
     line-height: 1.5;
   }
@@ -67,14 +67,14 @@
   .details {
     margin: 0 0 16px;
     padding: 12px;
-    border: 1px solid #E3E8EF;
+    border: 1px solid var(--modal-border);
     border-radius: 8px;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
   }
 
   .details p {
     margin: 4px 0;
-    color: #667085;
+    color: var(--text-secondary);
     font-size: 12px;
   }
 
@@ -83,7 +83,7 @@
   }
 
   .links a {
-    color: #2F7DF6;
+    color: var(--accent);
     text-decoration: none;
     font-size: 13px;
   }
@@ -93,10 +93,10 @@
   }
 
   .close {
-    border: 1px solid #2F7DF6;
+    border: 1px solid var(--accent);
     border-radius: 8px;
-    background: #2F7DF6;
-    color: #FFFFFF;
+    background: var(--accent);
+    color: var(--btn-text);
     padding: 8px 24px;
     font-size: 14px;
     font-weight: 600;
@@ -104,7 +104,7 @@
   }
 
   .close:hover {
-    background: #1F6FE5;
-    border-color: #1F6FE5;
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
 </style>

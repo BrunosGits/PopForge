@@ -134,7 +134,7 @@
     margin: 0;
     font-size: 15px;
     font-weight: 700;
-    color: #1E2329;
+    color: var(--text);
   }
 
   .chevron {
@@ -151,7 +151,7 @@
     display: grid;
     gap: 6px;
     margin-top: 14px;
-    color: #667085;
+    color: var(--text-secondary);
     font-size: 13px;
     font-weight: 500;
   }
@@ -163,8 +163,8 @@
     height: 38px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #F8FAFC;
-    color: #1E2329;
+    background: var(--bg-tertiary);
+    color: var(--text);
     padding: 0 12px;
     font-size: 13px;
     font-family:
@@ -180,15 +180,15 @@
   }
 
   input::placeholder {
-    color: #98A2B3;
+    color: var(--text-tertiary);
   }
 
   input:focus,
   select:focus {
     outline: none;
-    border-color: #2F7DF6;
+    border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(47, 125, 246, 0.14);
-    background: #FFFFFF;
+    background: var(--bg);
   }
 
   .mono {
@@ -211,18 +211,18 @@
     font-size: 13px;
     font-weight: 500;
     letter-spacing: 0.01em;
-    border: 1px solid #D0D5DD;
+    border: 1px solid var(--btn-border);
     border-radius: 8px;
-    background: #FFFFFF;
-    color: #344054;
+    background: var(--bg);
+    color: var(--btn-text-color);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
 
   .btn-secondary:hover {
-    background: #F5F6F8;
-    border-color: #C1C7CF;
+    background: var(--body-bg);
+    border-color: var(--btn-hover-border);
   }
 
   .btn-secondary:disabled {
@@ -242,7 +242,7 @@
     height: 20px;
     border: none;
     border-radius: 999px;
-    background: #D0D5DD;
+    background: var(--toggle-bg);
     cursor: pointer;
     padding: 0;
     position: relative;
@@ -251,7 +251,7 @@
   }
 
   .toggle.active {
-    background: #2F7DF6;
+    background: var(--accent);
   }
 
   .toggle-knob {
@@ -259,7 +259,7 @@
     width: 16px;
     height: 16px;
     border-radius: 999px;
-    background: #FFFFFF;
+    background: var(--bg);
     position: absolute;
     top: 2px;
     left: 2px;
@@ -294,8 +294,8 @@
     left: 50%;
     transform: translateX(-50%);
     white-space: nowrap;
-    background: #1E2329;
-    color: #fff;
+    background: var(--text);
+    color: var(--bg);
     font-size: 12px;
     font-weight: 400;
     padding: 6px 10px;

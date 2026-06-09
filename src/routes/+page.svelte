@@ -10,6 +10,7 @@
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import LogPanel from '$lib/components/LogPanel.svelte';
   import AboutDialog from '$lib/components/AboutDialog.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import Toast from '$lib/components/Toast.svelte';
 
   let mode: Mode = $state('convert');
@@ -28,6 +29,8 @@
 
   let jobs: Job[] = $state([]);
 
+  let perJobProgress: Record<number, { filePercent: number | null; stage: string }> = $state({});
+
   let progress: ConversionProgress = $state({
     current: 0,
     total: 0,
@@ -40,6 +43,7 @@
   let unlistenDragDrop: UnlistenFn | null = null;
   let isDragOver = $state(false);
   let showAbout = $state(false);
+  let showClearConfirm = $state(false);
   let showLog = $state(false);
 
   let collapsedQueue = $state(true);
@@ -165,10 +169,21 @@
   }
 
   function clearQueue() {
-    if (jobs.length > 0 && !window.confirm('Clear all jobs?')) return;
+    if (jobs.length > 0) {
+      showClearConfirm = true;
+    }
+  }
+
+  function confirmClear() {
+    showClearConfirm = false;
     jobs = [];
     selectedJobIds = new Set();
     progress = { current: 0, total: 0, fileName: '', stage: 'idle', filePercent: null };
+    perJobProgress = {};
+  }
+
+  function cancelClear() {
+    showClearConfirm = false;
   }
 
   function removeJob(id: number) {
@@ -178,10 +193,46 @@
     }
     selectedJobIds = new Set(Array.from(selectedJobIds).filter((sid) => sid !== id));
     jobs = jobs.filter((j) => j.id !== id);
+    const next = { ...perJobProgress };
+    delete next[id];
+    perJobProgress = next;
   }
 
   function retryJob(id: number) {
     updateJob(id, { status: 'pending', message: null, outputPath: null, commandPreview: null });
+    const next = { ...perJobProgress };
+    delete next[id];
+    perJobProgress = next;
+  }
+
+  function updateJobMetadata(id: number, field: 'serial' | 'title', value: string) {
+    jobs = jobs.map((j) => {
+      if (j.id !== id) return j;
+      const fallback = { serial: '', title: '', region: '' };
+      const cur = j.metadata ?? fallback;
+      let serial = cur.serial;
+      let title = cur.title;
+      let region = cur.region;
+      if (field === 'serial') {
+        serial = value;
+        region = value ? regionFromSerial(value) : '';
+      } else {
+        title = value;
+      }
+      const metadata: GameMetadata | null = serial || title
+        ? { serial, title, region }
+        : null;
+      return { ...j, metadata };
+    });
+  }
+
+  function regionFromSerial(serial: string): string {
+    if (/^SCUS/i.test(serial)) return 'USA';
+    if (/^SCES/i.test(serial)) return 'Europe';
+    if (/^SCPS/i.test(serial)) return 'Japan';
+    if (/^SCAS/i.test(serial)) return 'Asia';
+    if (/^SCKS/i.test(serial)) return 'Korea';
+    return 'Unknown';
   }
 
   async function loadSettings() {
@@ -219,12 +270,26 @@
     if (popstation.available && !popstationPath) popstationPath = popstation.path || '';
   }
 
+  function extractSerialFromFilename(name: string): string | null {
+    const m = name.match(/[A-Z]{4}-\d{5}/);
+    return m ? m[0] : null;
+  }
+
+  function extractTitleFromFilename(name: string): string | null {
+    let s = name.replace(/\.[^.]+$/, '');
+    s = s.replace(/[[(][A-Z]{4}-\d{5}[\])]/g, '').trim();
+    s = s.replace(/\[.*?\]|\(.*?\)/g, '').trim();
+    return s || null;
+  }
+
   async function enqueuePaths(paths: string[], enqueueMode: Mode = mode) {
     if (paths.length === 0) return;
 
     let newJobs: Job[] = [];
     for (const filePath of paths) {
       const fileName = filePath.split(/[\\/]/).pop() || filePath;
+      const serial = extractSerialFromFilename(fileName);
+      const title = extractTitleFromFilename(fileName);
       newJobs.push({
         id: Date.now() + Math.random(),
         filePath,
@@ -234,7 +299,9 @@
         message: null,
         outputPath: null,
         commandPreview: null,
-        metadata: null,
+        metadata: serial || title
+          ? { serial: serial ?? '', title: title ?? '', region: serial ? regionFromSerial(serial) : '' }
+          : null,
         groupId: null,
         discIndex: null
       });
@@ -253,7 +320,26 @@
     autoDetectGroups();
   }
 
-  async function addJobs() {
+  async function addSingleJob() {
+    if (!isTauriRuntime()) {
+      appendLog('[info] File picker is available when the app runs inside Tauri.');
+      return;
+    }
+
+    const filterName = mode === 'extract' ? 'PBP' : 'ISO/BIN/CUE';
+
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: filterName, extensions: mode === 'extract' ? ['pbp'] : ['iso', 'bin', 'cue'] }]
+    });
+
+    if (!selected) return;
+
+    const paths = Array.isArray(selected) ? selected : [selected];
+    await enqueuePaths(paths);
+  }
+
+  async function addBatchJobs() {
     if (!isTauriRuntime()) {
       appendLog('[info] File picker is available when the app runs inside Tauri.');
       return;
@@ -324,51 +410,61 @@
   }
 
   async function downloadGameInfo() {
-    const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
-    const fileName = lastJob?.fileName || backendFile;
-    const filePath = lastJob?.filePath || '';
-    if (!fileName) {
-      appendLog('[info] Add a file to the queue first to fetch metadata.');
-      return;
+    let targets = jobs.filter((j) => j.mode === mode && j.status === 'pending');
+    if (targets.length === 0) {
+      const last = jobs.filter((j) => j.mode === mode).at(-1);
+      if (!last) { appendLog('[info] Add a file to the queue first to fetch metadata.'); return; }
+      targets = [last];
     }
-    try {
-      const metadata = await invokeCommand<GameMetadata>('scrape_metadata', {
-        filePath: filePath || null,
-        fileName
-      });
-      if (metadata.title && metadata.title !== 'Unknown title') {
-        gameName = metadata.title;
+    let fetched = 0;
+    for (const job of targets) {
+      try {
+        const metadata = await invokeCommand<GameMetadata>('scrape_metadata', {
+          filePath: job.filePath || null,
+          fileName: job.fileName
+        });
+        if (metadata.title && metadata.title !== 'Unknown title') {
+          gameName = metadata.title;
+          updateJobMetadata(job.id, 'title', metadata.title);
+        }
+        if (metadata.serial) {
+          gameId = metadata.serial;
+          updateJobMetadata(job.id, 'serial', metadata.serial);
+        }
+        fetched++;
+      } catch {
+        // skip failed jobs silently
       }
-      if (metadata.serial) {
-        gameId = metadata.serial;
-      }
-      appendLog(`[info] Metadata fetched: ${metadata.title} (${metadata.serial})`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      appendLog(`[warn] Metadata fetch failed: ${msg}`);
     }
+    appendLog(`[info] Metadata fetched for ${fetched} file(s).`);
   }
 
   async function autoGameId() {
-    const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
-    const fileName = lastJob?.fileName || backendFile;
-    const filePath = lastJob?.filePath || '';
-    if (!fileName) {
-      appendLog('[info] Add a file to the queue first, or select a file to extract the Game ID.');
-      return;
+    let targets = jobs.filter((j) => j.mode === mode && j.status === 'pending');
+    if (targets.length === 0) {
+      const last = jobs.filter((j) => j.mode === mode).at(-1);
+      if (!last) { appendLog('[info] Add a file to the queue first, or select a file to extract the Game ID.'); return; }
+      targets = [last];
     }
-    const serial = await invokeCommand<string | null>('extract_serial', { filename: fileName, filePath: filePath || null });
-    if (serial) {
-      gameId = serial;
-      appendLog(`[info] Game ID set to ${serial} from ${fileName}`);
-    } else {
-      appendLog(`[info] No serial pattern found in ${fileName}`);
+    let extracted = 0;
+    for (const job of targets) {
+      const serial = await invokeCommand<string | null>('extract_serial', {
+        filename: job.fileName,
+        filePath: job.filePath || null
+      });
+      if (serial) {
+        gameId = serial;
+        updateJobMetadata(job.id, 'serial', serial);
+        extracted++;
+      }
     }
+    appendLog(`[info] Game ID extracted for ${extracted} file(s).`);
   }
 
   async function runAll() {
     if (jobs.length === 0) return;
 
+    perJobProgress = {};
     let succeeded = 0;
     let failed = 0;
 
@@ -385,6 +481,9 @@
         singles.push(job);
       }
     }
+
+    let currentIndex = 0;
+    const totalJobs = groups.size + singles.length;
 
     async function runGroup(group: typeof pending) {
       const primary = group[0];
@@ -415,7 +514,9 @@
          }>('run_conversion', {
            filePath: primary.filePath,
            fileName: primary.fileName,
-           options
+           options,
+           queueIndex: currentIndex,
+           queueTotal: totalJobs
          });
 
         for (const job of group) {
@@ -441,6 +542,8 @@
         }
         failed++;
         showToast('error', `${primary.fileName}: ${message}`);
+      } finally {
+        currentIndex++;
       }
     }
 
@@ -470,7 +573,9 @@
          }>('run_conversion', {
            filePath: job.filePath,
            fileName: job.fileName,
-           options
+           options,
+           queueIndex: currentIndex,
+           queueTotal: totalJobs
          });
 
         updateJob(job.id, {
@@ -492,6 +597,8 @@
         updateJob(job.id, { status: 'error', message });
         failed++;
         showToast('error', `${job.fileName}: ${message}`);
+      } finally {
+        currentIndex++;
       }
     }
 
@@ -507,6 +614,16 @@
       showToast('success', 'All jobs finished');
     } else if (failed > 0) {
       showToast('error', `${failed} job(s) failed`);
+    }
+  }
+
+  async function cancelConversion() {
+    try {
+      await invokeCommand<string>('cancel_conversion');
+      appendLog('[info] Cancelling...');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendLog(`[warn] Cancel failed: ${msg}`);
     }
   }
 
@@ -545,6 +662,14 @@
           stage: payload.stage,
           filePercent: payload.filePercent
         };
+        // Update per-job progress by matching fileName with a job in current mode
+        const modeJob = jobs.find((j) => j.mode === mode && j.fileName === payload.fileName);
+        if (modeJob) {
+          perJobProgress = {
+            ...perJobProgress,
+            [modeJob.id]: { filePercent: payload.filePercent, stage: payload.stage }
+          };
+        }
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -565,17 +690,28 @@
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
 >
-  <TopBar bind:mode isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'} onAbout={() => (showAbout = true)} />
+  <TopBar bind:mode isRunning={progress.stage !== 'idle' && progress.stage !== 'completed' && progress.stage !== 'cancelled' && progress.stage !== 'cancelled'} onAbout={() => (showAbout = true)} />
 
   {#if showAbout}
     <AboutDialog onClose={() => (showAbout = false)} />
   {/if}
 
+  {#if showClearConfirm}
+    <ConfirmDialog
+      title="Clear all jobs?"
+      message="This will remove all jobs from the queue. This action cannot be undone."
+      confirmLabel="Clear"
+      onConfirm={confirmClear}
+      onCancel={cancelClear}
+    />
+  {/if}
+
   <div class="content">
     <InputPanel
       {mode}
-      isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
-      onAddJobs={addJobs}
+      isRunning={progress.stage !== 'idle' && progress.stage !== 'completed' && progress.stage !== 'cancelled'}
+      onAddSingle={addSingleJob}
+      onAddBatch={addBatchJobs}
     />
 
     <QueuePanel
@@ -583,7 +719,8 @@
       {progress}
       {mode}
       {selectedJobIds}
-      isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+      {perJobProgress}
+      isRunning={progress.stage !== 'idle' && progress.stage !== 'completed' && progress.stage !== 'cancelled'}
       collapsed={collapsedQueue}
       onToggle={() => (collapsedQueue = !collapsedQueue)}
       onRunAll={runAll}
@@ -593,6 +730,8 @@
       onToggleSelection={toggleJobSelection}
       onMergeSelected={mergeSelectedJobs}
       onUngroupJob={ungroupJob}
+      onCancel={cancelConversion}
+      onUpdateJobMetadata={updateJobMetadata}
     />
 
       <ConvertOptions
@@ -603,7 +742,7 @@
         bind:outputTemplate
         bind:outputFolder
         bind:subfolderPerGame
-        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed' && progress.stage !== 'cancelled'}
         collapsed={collapsedOptions}
         onToggle={() => (collapsedOptions = !collapsedOptions)}
         onChooseOutputFolder={chooseOutputFolder}
@@ -617,7 +756,7 @@
         {outputFolder}
         {backendFile}
         {backendMessage}
-        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed'}
+        isRunning={progress.stage !== 'idle' && progress.stage !== 'completed' && progress.stage !== 'cancelled'}
         onTestBackend={testBackend}
       />
     {/if}
@@ -654,6 +793,66 @@
     --danger: #E5484D;
     --danger-bg: rgba(229, 72, 77, 0.08);
     --danger-border: rgba(229, 72, 77, 0.35);
+    --success-bg: #ECFDF3;
+    --success-text: #25A55F;
+    --success-border: #ABF0C6;
+    --error-bg: #FEF2F2;
+    --error-text: #E5484D;
+    --error-border: #FECACA;
+    --warn-text: #DC6803;
+    --info-text: #1758A6;
+    --btn-border: #D0D5DD;
+    --btn-text-color: #344054;
+    --btn-hover-border: #C1C7CF;
+    --status-badge-bg: #F2F4F7;
+    --modal-border: #E3E8EF;
+    --drop-border: #7CADFF;
+    --toggle-bg: #E4E7ED;
+    --btn-primary-border: #2476EE;
+    --btn-danger-hover: #D04145;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1E222A;
+      --bg-secondary: #262B34;
+      --bg-tertiary: #2A2F39;
+      --bg-hover: #2A2F39;
+      --text: #E8ECF0;
+      --text-secondary: #9CA3AF;
+      --text-tertiary: #6B7280;
+      --border: #374151;
+      --border-subtle: #2D323B;
+      --accent: #5B9CF6;
+      --accent-hover: #7BAFF7;
+      --accent-bg: rgba(91, 156, 246, 0.12);
+      --accent-bg-hover: rgba(91, 156, 246, 0.18);
+      --overlay: rgba(0, 0, 0, 0.6);
+      --btn-text: #FFFFFF;
+      --body-bg: #161A20;
+      --meta-tag-bg: rgba(91, 156, 246, 0.10);
+      --meta-tag-border: rgba(91, 156, 246, 0.30);
+      --danger: #F87171;
+      --danger-bg: rgba(248, 113, 113, 0.10);
+      --danger-border: rgba(248, 113, 113, 0.30);
+      --success-bg: rgba(37, 165, 95, 0.12);
+      --success-text: #4ADE80;
+      --success-border: rgba(37, 165, 95, 0.30);
+      --error-bg: rgba(248, 113, 113, 0.10);
+      --error-text: #F87171;
+      --error-border: rgba(248, 113, 113, 0.30);
+      --warn-text: #FBBF24;
+      --info-text: #5B9CF6;
+      --btn-border: #4B5563;
+      --btn-text-color: #D1D5DB;
+      --btn-hover-border: #6B7280;
+      --status-badge-bg: #374151;
+      --modal-border: #374151;
+      --drop-border: #5B9CF6;
+      --toggle-bg: #374151;
+      --btn-primary-border: #5B9CF6;
+      --btn-danger-hover: #DC2626;
+    }
   }
 
   :global(body) {
@@ -720,9 +919,9 @@
     height: 32px;
     padding: 0 14px;
     border-radius: 999px;
-    border: 1px solid #D0D5DD;
-    background: #FFFFFF;
-    color: #667085;
+    border: 1px solid var(--btn-border);
+    background: var(--bg);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.01em;
@@ -732,8 +931,8 @@
   }
 
   .log-toggle:hover {
-    border-color: #2F7DF6;
-    color: #2F7DF6;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
 

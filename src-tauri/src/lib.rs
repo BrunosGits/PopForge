@@ -2,9 +2,14 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Mutex;
 
 use tauri::{Emitter, Manager, PhysicalSize, Size, WindowEvent};
+
+// Cancel support
+static CANCEL: AtomicBool = AtomicBool::new(false);
+static CHILD_PID: AtomicI32 = AtomicI32::new(0);
 
 // Global state
 static LAST_FILE: Mutex<String> = Mutex::new(String::new());
@@ -162,6 +167,27 @@ fn get_toolchain_status(paths: Option<ToolPaths>) -> Vec<ToolStatus> {
 }
 
 #[tauri::command]
+fn cancel_conversion() -> String {
+    CANCEL.store(true, Ordering::Relaxed);
+    let pid = CHILD_PID.load(Ordering::Relaxed);
+    if pid > 0 {
+        #[cfg(unix)]
+        {
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status();
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(&["/PID", &pid.to_string(), "/F"])
+                .status();
+        }
+    }
+    "Cancelled".to_string()
+}
+
+#[tauri::command]
 async fn run_conversion(
     app: tauri::AppHandle,
     file_path: String,
@@ -169,6 +195,7 @@ async fn run_conversion(
     queue_index: Option<usize>,
     queue_total: Option<usize>,
 ) -> ConversionResult {
+    CANCEL.store(false, Ordering::Relaxed);
     let current = queue_index.unwrap_or(0);
     let total = queue_total.unwrap_or(0);
     let file_name = Path::new(&file_path)
@@ -212,6 +239,26 @@ async fn run_conversion(
         },
     };
 
+    if CANCEL.load(Ordering::Relaxed) {
+        CANCEL.store(false, Ordering::Relaxed);
+        emit_progress(
+            &app,
+            ConversionProgress {
+                current,
+                total,
+                file_name: file_name.clone(),
+                stage: "cancelled".to_string(),
+                file_percent: Some(0.0),
+            },
+        );
+        return ConversionResult {
+            success: false,
+            message: "Cancelled by user.".to_string(),
+            output_path: None,
+            command_preview: None,
+        };
+    }
+
     emit_progress(
         &app,
         ConversionProgress {
@@ -246,6 +293,10 @@ fn derive_output_name(path: &Path) -> String {
     } else {
         cleaned
     }
+}
+
+fn check_cancelled() -> bool {
+    CANCEL.load(Ordering::Relaxed)
 }
 
 fn run_conversion_inner(
@@ -320,6 +371,15 @@ fn run_conversion_inner(
         };
     }
 
+    if check_cancelled() {
+        return ConversionResult {
+            success: false,
+            message: "Cancelled by user.".to_string(),
+            output_path: None,
+            command_preview: None,
+        };
+    }
+
     if options.mode == "extract" {
         let input_title = input_path
             .file_stem()
@@ -380,12 +440,7 @@ fn run_conversion_inner(
             },
         );
 
-        let output = Command::new(&step.program)
-            .args(&step.args)
-            .output()
-            .map_err(|error| format!("Failed to start {}: {}", step.program, error));
-
-        let result = match output {
+        let result = match run_with_cancel(&step) {
             Ok(output) => {
                 if output.status.success() {
                     ConversionResult {
@@ -440,6 +495,17 @@ fn run_conversion_inner(
         return result;
     }
 
+    emit_progress(
+        app,
+        ConversionProgress {
+            current,
+            total,
+            file_name: file_name.to_string(),
+            stage: "preparing".to_string(),
+            file_percent: Some(0.1),
+        },
+    );
+
     let output_name = derive_output_name(input_path);
     
     let output_path = if options.subfolder_per_game {
@@ -468,9 +534,15 @@ fn run_conversion_inner(
             };
         }
     };
-    println!(
-        "[info] Staged PSP assets at {}",
-        assets.temp_dir.display()
+    emit_progress(
+        app,
+        ConversionProgress {
+            current,
+            total,
+            file_name: file_name.to_string(),
+            stage: "assets_ready".to_string(),
+            file_percent: Some(0.25),
+        },
     );
 
     let is_multi = all_paths.len() > 1;
@@ -501,6 +573,17 @@ fn run_conversion_inner(
 
     let pipeline = build_conversion_pipeline(&input_for_pipeline, &output_path, &output_name, options, &assets);
     let command_preview = pipeline.preview.join("\n");
+
+    emit_progress(
+        app,
+        ConversionProgress {
+            current,
+            total,
+            file_name: file_name.to_string(),
+            stage: "ready".to_string(),
+            file_percent: Some(0.35),
+        },
+    );
 
     if let Some(missing_tool) = first_missing_tool(&pipeline.required_tools) {
         return ConversionResult {
@@ -639,6 +722,33 @@ fn build_conversion_pipeline(
     }
 }
 
+fn run_with_cancel(step: &CommandStep) -> Result<std::process::Output, String> {
+    if check_cancelled() {
+        return Err("Cancelled by user.".to_string());
+    }
+
+    let child = Command::new(&step.program)
+        .args(&step.args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Failed to start {}: {}", step.program, error))?;
+
+    CHILD_PID.store(child.id() as i32, Ordering::Relaxed);
+
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Failed to wait for {}: {}", step.program, error))?;
+
+    CHILD_PID.store(0, Ordering::Relaxed);
+
+    if check_cancelled() {
+        return Err("Cancelled by user.".to_string());
+    }
+
+    Ok(output)
+}
+
 fn run_pipeline(
     steps: &[CommandStep],
     app: &tauri::AppHandle,
@@ -646,8 +756,19 @@ fn run_pipeline(
     total: usize,
     file_name: &str,
 ) -> Result<(), String> {
-    for step in steps {
+    let step_count = steps.len();
+    for (idx, step) in steps.iter().enumerate() {
+        if check_cancelled() {
+            return Err("Cancelled by user.".to_string());
+        }
+
         ensure_parent_dirs(&step.args)?;
+
+        let file_percent = if step_count > 0 {
+            Some(0.35 + ((idx as f32) / step_count as f32) * 0.55)
+        } else {
+            None
+        };
 
         emit_progress(
             app,
@@ -656,14 +777,11 @@ fn run_pipeline(
                 total,
                 file_name: file_name.to_string(),
                 stage: step.stage.clone(),
-                file_percent: None,
+                file_percent,
             },
         );
 
-        let output = Command::new(&step.program)
-            .args(&step.args)
-            .output()
-            .map_err(|error| format!("Failed to start {}: {}", step.program, error))?;
+        let output = run_with_cancel(step)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1096,23 +1214,36 @@ fn resolve_bin_from_cue(cue_path: &str) -> Option<String> {
     None
 }
 
-fn extract_serial_from_file(path: &str) -> Option<String> {
-    // If given a .cue file, resolve the referenced .bin instead
-    let path = if path.to_lowercase().ends_with(".cue") {
-        resolve_bin_from_cue(path).unwrap_or(path.to_string())
-    } else {
-        path.to_string()
-    };
-    let data = std::fs::read(&path).ok()?;
+fn find_companion_cue(bin_path: &str) -> Option<String> {
+    let p = std::path::Path::new(bin_path);
+    let parent = p.parent()?;
+    let stem = p.file_stem()?;
+    let stem_str = stem.to_str()?;
+    // Try same stem first (e.g. "Game (Track 2).bin" -> "Game (Track 2).cue")
+    let same_stem = parent.join(format!("{}.cue", stem_str));
+    if same_stem.exists() {
+        return Some(same_stem.to_string_lossy().to_string());
+    }
+    // Fallback: any .cue file in the same directory
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.extension().map_or(false, |e| e.eq_ignore_ascii_case("cue")) {
+                return Some(entry_path.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
+fn extract_serial_from_iso(path: &str) -> Option<String> {
+    let data = std::fs::read(path).ok()?;
     let (sector_size, user_data_off) = detect_sector_format(&data)?;
 
     // PVD user data starts at LBA 16
     let pvd_off = 16 * sector_size + user_data_off;
 
     // Root directory record is at PVD offset 156
-    // Structure: len(1), xattr_len(1), extent_lba(4), extent_lba_be(4),
-    //            data_len(4), data_len_be(4), datetime(7), flags(1),
-    //            unit_size(1), interleave(1), vol_seq(4), name_len(1)
     let root_record_start = pvd_off + 156;
     let root_extent = u32::from_le_bytes([
         data[root_record_start + 2],
@@ -1147,11 +1278,9 @@ fn extract_serial_from_file(path: &str) -> Option<String> {
         }
         let name = &data[root_off + pos + 33..root_off + pos + 33 + name_len];
         if let Ok(name_str) = std::str::from_utf8(name) {
-            // Check if this is an executable file with the serial pattern
             if let Some(serial) = parse_serial_from_iso_name(name_str) {
                 return Some(serial);
             }
-            // Check for SYSTEM.CNF
             if name_str == "SYSTEM.CNF" || name_str == "SYSTEM.CNF;1" {
                 let file_extent = u32::from_le_bytes([
                     root_data[pos + 2],
@@ -1183,19 +1312,43 @@ fn extract_serial_from_file(path: &str) -> Option<String> {
                         }
                     }
                 }
-                // Only one SYSTEM.CNF per disc
                 break;
             }
         }
         pos += record_len;
     }
 
-    // Fallback: try the Volume ID from PVD (some discs store the serial here instead)
+    // Fallback: try the Volume ID from PVD
     if let Ok(vol_id) = std::str::from_utf8(&data[pvd_off + 40..pvd_off + 72]) {
         let vol_id = vol_id.trim_end_matches(' ').trim_end_matches('\0');
         if !vol_id.is_empty() {
             if let Some(serial) = parse_serial_from_iso_name(vol_id) {
                 return Some(serial);
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_serial_from_file(path: &str) -> Option<String> {
+    let resolved = if path.to_lowercase().ends_with(".cue") {
+        resolve_bin_from_cue(path).unwrap_or(path.to_string())
+    } else {
+        path.to_string()
+    };
+
+    if let Some(serial) = extract_serial_from_iso(&resolved) {
+        return Some(serial);
+    }
+
+    // If the file is a .bin and extraction failed (audio track), try companion .cue
+    if resolved.to_lowercase().ends_with(".bin") {
+        if let Some(cue) = find_companion_cue(&resolved) {
+            if let Some(data_bin) = resolve_bin_from_cue(&cue) {
+                if data_bin.to_lowercase() != resolved.to_lowercase() {
+                    return extract_serial_from_iso(&data_bin);
+                }
             }
         }
     }
@@ -1293,38 +1446,62 @@ fn fetch_from_psxdatacenter(serial: &str, title_hint: Option<&str>) -> Option<Ga
         .map(|c| c.to_ascii_uppercase())
         .unwrap_or('A');
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(10))
-        .build();
-
     let mut letters: Vec<char> = ('A'..='Z').collect();
     letters.sort_by_key(|&c| if c == hint_letter { 0 } else { 1 });
 
-    for &letter in &letters {
-        let url = psxdatacenter_url(serial, letter);
-        let request = agent
-            .get(&url)
-            .set("User-Agent", "PopForge/0.1 (+https://github.com/popforge)")
-            .set("Accept", "text/html");
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
 
-        if let Ok(resp) = request.call() {
-            if let Ok(html) = resp.into_string() {
-                if let Some((title, region)) = parse_psxdatacenter_page(&html) {
-                    return Some(GameMetadata {
-                        serial: serial.to_string(),
-                        title,
-                        region: if region.is_empty() {
-                            region_name_from_serial(serial).to_string()
-                        } else {
-                            region
-                        },
-                    });
+    let found = AtomicBool::new(false);
+    let result: Mutex<Option<GameMetadata>> = Mutex::new(None);
+
+    let serial = serial.to_string();
+
+    std::thread::scope(|scope| {
+        for &letter in &letters {
+            let serial = &serial;
+            let found = &found;
+            let result = &result;
+
+            scope.spawn(move || {
+                if found.load(Ordering::Relaxed) {
+                    return;
                 }
-            }
-        }
-    }
 
-    None
+                let url = psxdatacenter_url(serial, letter);
+                let agent = ureq::AgentBuilder::new()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build();
+
+                let request = agent
+                    .get(&url)
+                    .set("User-Agent", "PopForge/0.1 (+https://github.com/popforge)")
+                    .set("Accept", "text/html");
+
+                if let Ok(resp) = request.call() {
+                    if let Ok(html) = resp.into_string() {
+                        if let Some((title, region)) = parse_psxdatacenter_page(&html) {
+                            let meta = GameMetadata {
+                                serial: serial.to_string(),
+                                title,
+                                region: if region.is_empty() {
+                                    region_name_from_serial(serial).to_string()
+                                } else {
+                                    region
+                                },
+                            };
+                            if let Ok(mut guard) = result.lock() {
+                                *guard = Some(meta);
+                            }
+                            found.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    result.into_inner().ok().and_then(|opt| opt)
 }
 
 #[tauri::command]
@@ -1355,6 +1532,16 @@ fn scrape_metadata(file_name: String, file_path: Option<String>) -> GameMetadata
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(target_os = "macos")]
+fn strip_quarantine(path: &Path) {
+    if path.exists() {
+        let _ = std::process::Command::new("xattr")
+            .arg("-cr")
+            .arg(path)
+            .output();
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -1377,6 +1564,11 @@ pub fn run() {
                     }
                 });
             }
+            #[cfg(target_os = "macos")]
+            {
+                let psxpackager = resolve_psxpackager_path(None);
+                strip_quarantine(&psxpackager);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1386,6 +1578,7 @@ pub fn run() {
             get_last_file,
             get_toolchain_status,
             run_conversion,
+            cancel_conversion,
             get_settings,
             save_settings,
             scrape_metadata,

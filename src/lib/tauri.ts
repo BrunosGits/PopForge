@@ -49,8 +49,8 @@ export function invokeCommand<T>(command: string, args?: Record<string, unknown>
   return invoke<T>(command, args);
 }
 
-export function onProgress(event: string, cb: (data: unknown) => void): Promise<() => void> {
-  if (!isTauriRuntime()) return Promise.resolve(() => {});
-  import('@tauri-apps/api/event').then(({ listen }) => listen(event, (e) => cb(e.payload)));
-  return Promise.resolve(() => {});
+export async function onProgress(event: string, cb: (data: unknown) => void): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {};
+  const { listen } = await import('@tauri-apps/api/event');
+  return listen(event, (e) => cb(e.payload));
 }

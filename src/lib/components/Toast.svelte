@@ -17,18 +17,18 @@
         <span class="toast-icon">
           {#if toast.type === 'success'}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" stroke="#25A55F" stroke-width="1.5"/>
-              <path d="M5 8l2 2 4-4" stroke="#25A55F" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="8" cy="8" r="7" stroke="var(--success-text)" stroke-width="1.5"/>
+              <path d="M5 8l2 2 4-4" stroke="var(--success-text)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           {:else if toast.type === 'error'}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" stroke="#E5484D" stroke-width="1.5"/>
-              <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#E5484D" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="8" cy="8" r="7" stroke="var(--danger)" stroke-width="1.5"/>
+              <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="var(--danger)" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
           {:else}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" stroke="#2F7DF6" stroke-width="1.5"/>
-              <path d="M8 5v4M8 11v0" stroke="#2F7DF6" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="8" cy="8" r="7" stroke="var(--accent)" stroke-width="1.5"/>
+              <path d="M8 5v4M8 11v0" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
           {/if}
         </span>
@@ -78,21 +78,21 @@
   }
 
   .toast.success {
-    background: #ECFDF3;
-    border: 1px solid #ABF0C6;
-    color: #067647;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    color: var(--success-text);
   }
 
   .toast.error {
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
-    color: #B42318;
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    color: var(--error-text);
   }
 
   .toast.info {
-    background: #EAF2FF;
-    border: 1px solid #BFDBFE;
-    color: #1758A6;
+    background: var(--accent-bg);
+    border: 1px solid var(--meta-tag-border);
+    color: var(--info-text);
   }
 
   .toast-icon {
